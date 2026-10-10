@@ -1,0 +1,70 @@
+---
+// Una interacción: objeto en la mano → lo que da, cuánto gasta y cuánto esperar.
+import ItemChip from './ItemChip.astro';
+import { FORMS } from '../data/labels';
+import type { Interaction } from '../data/types';
+
+interface Props {
+  i: Interaction;
+}
+const { i } = Astro.props;
+const cooldown = (cd: number) =>
+  cd < 0 ? 'Hasta que le crezca la lana' : cd === 0 ? 'Sin espera' : cd < 60 ? `${cd} s` : `Cada ${cd / 60} min`;
+const wear = i.tool === 'minecraft:brush' ? `Gasta ${i.uses} de durabilidad` : undefined;
+const note = [i.form && FORMS[i.form], i.gender && FORMS[i.gender]].filter(Boolean).join(' · ');
+---
+
+<div class="way">
+  {note && <span class="note">{note}</span>}
+  <span class="flow">
+    <ItemChip id={i.tool} hint="Clic derecho a tu Pokémon con este objeto en la mano" />
+    <span class="arrow" aria-label="da">→</span>
+    <ItemChip id={i.item} prefix={i.amount && i.amount !== '1' ? `${i.amount} × ` : undefined} />
+  </span>
+  <span class="meta">
+    <span class:list={['cd', { free: i.cd === 0 }]}>⏱️ {cooldown(i.cd)}</span>
+    {wear && <span class="wear">{wear}</span>}
+  </span>
+</div>
+
+<style>
+  .way {
+    display: grid;
+    gap: 4px;
+  }
+  .flow {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+  }
+  .arrow {
+    color: var(--muted);
+    font-weight: 700;
+  }
+  .meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    font-size: 0.8rem;
+  }
+  .cd,
+  .wear {
+    padding: 2px 8px;
+    border-radius: 999px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+  }
+  .cd.free {
+    border-color: #4cc46b;
+    color: #7fe09a;
+  }
+  .wear {
+    color: var(--muted);
+  }
+  .note {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: #ffd54f;
+  }
+</style>

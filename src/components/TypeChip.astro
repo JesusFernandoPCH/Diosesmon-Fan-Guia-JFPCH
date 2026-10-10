@@ -1,0 +1,28 @@
+---
+import { TYPES } from '../data/labels';
+
+interface Props {
+  type: string;
+  small?: boolean;
+}
+const { type, small } = Astro.props;
+const [name, color] = TYPES[type] ?? [type, '#777'];
+---
+
+<span class:list={['type', { small }]} style={`--t: ${color}`}>{name}</span>
+
+<style>
+  .type {
+    display: inline-block;
+    padding: 3px 12px;
+    border-radius: 999px;
+    background: var(--t);
+    color: #fff;
+    font: 600 0.85rem var(--font-title);
+    text-shadow: 0 1px 2px rgb(0 0 0 / 0.45);
+  }
+  .small {
+    padding: 1px 8px;
+    font-size: 0.72rem;
+  }
+</style>

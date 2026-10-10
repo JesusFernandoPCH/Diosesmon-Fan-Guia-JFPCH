@@ -1,0 +1,511 @@
+---
+import Base from '../../layouts/Base.astro';
+import TypeChip from '../../components/TypeChip.astro';
+import BiomeList from '../../components/BiomeList.astro';
+import MoonChip from '../../components/MoonChip.astro';
+import PlaceChip from '../../components/PlaceChip.astro';
+import Tip from '../../components/Tip.astro';
+import Icon from '../../components/Icon.astro';
+import EvoTree from '../../components/EvoTree.astro';
+import MegaCard from '../../components/MegaCard.astro';
+import FusionCard from '../../components/FusionCard.astro';
+import { FUSIONS } from '../../data/fusions';
+import InteractionWay from '../../components/InteractionWay.astro';
+import interactionData from '../../data/interactions.json';
+import { all, bySlug, familyMembers, rootOf } from '../../lib/evo';
+import { megas as availableMegas } from '../../data/obtain';
+import blocks from '../../data/blocks.json';
+import meta from '../../data/meta.json';
+import type { Interaction, Pokemon, Spawn } from '../../data/types';
+import { BLOCK_TAGS, BUCKETS, CATEGORIES, EGG, FORMS, POSITIONS, TIMES, TYPES, ZONES, label } from '../../data/labels';
+
+export function getStaticPaths() {
+  return all.map((p, i) => ({ params: { slug: p.slug }, props: { p, prev: all[i - 1], next: all[i + 1] } }));
+}
+
+const { p, prev, next } = Astro.props as { p: Pokemon; prev?: Pokemon; next?: Pokemon };
+const num = (id: number) => `#${String(id).padStart(4, '0')}`;
+const BUCKET_ORDER = Object.keys(BUCKETS);
+const blockName = (b: string) => (blocks as Record<string, string>)[b] ?? label(BLOCK_TAGS, b);
+
+// Condiciones de un spawn como lista de textos cortos
+function conditions(s: Spawn) {
+  const out: string[] = [];
+  const form = s.form?.split(' ').map((t) => FORMS[t]).filter(Boolean).join(', ');
+  if (form) out.push(form);
+  if (s.alpha) out.push('Líder alfa');
+  else if (s.herd) out.push(s.bucket === 'boss' ? 'En la manada de un alfa' : 'En manada');
+  if (s.time) out.push(TIMES[s.time] ?? s.time);
+  if (s.thunder) out.push('Con tormenta');
+  else if (s.rain === true) out.push('Con lluvia');
+  else if (s.rain === false) out.push('Sin lluvia');
+  if (s.sky === true) out.push('Cielo abierto');
+  if (s.sky === false) out.push('Bajo techo o cueva');
+  if (s.minY !== undefined && s.maxY !== undefined) out.push(`Altura Y ${s.minY} a ${s.maxY}`);
+  else if (s.minY !== undefined) out.push(`Altura Y ≥ ${s.minY}`);
+  else if (s.maxY !== undefined) out.push(`Altura Y ≤ ${s.maxY}`);
+  if (s.nearby) out.push(`Cerca de: ${[...new Set(s.nearby.map(blockName))].join(', ')}`);
+  if (s.snack) out.push('Solo con Poké Snack');
+  if (s.slime) out.push('Chunk de slime');
+  return out;
+}
+
+// Une spawns que se ven iguales (solo cambian peso, nivel o variantes cosméticas)
+const rows = new Map<string, { s: Spawn; conds: string[] }>();
+for (const s of p.spawns) {
+  const conds = conditions(s);
+  const key = JSON.stringify([s.pos, s.alpha ? 'boss' : s.bucket, s.zones, s.except, s.biomes, conds, s.moon, s.places, s.lure, s.noLure]);
+  const prevRow = rows.get(key);
+  if (!prevRow || prevRow.s.w < s.w) rows.set(key, { s, conds });
+}
+const groups = Object.entries(POSITIONS)
+  .map(([pos, [name, icon, help]]) => ({
+    pos,
+    name,
+    icon,
+    help,
+    rows: [...rows.values()]
+      .filter((r) => r.s.pos === pos)
+      .sort((a, b) => BUCKET_ORDER.indexOf(a.s.bucket) - BUCKET_ORDER.indexOf(b.s.bucket) || b.s.w - a.s.w),
+  }))
+  .filter((g) => g.rows.length);
+
+const mainColor = TYPES[p.types[0]]?.[1] ?? '#777';
+const canBreed = !p.egg.includes('undiscovered') && !p.cats.includes('baby');
+const pct = (n: number) => `${Math.round(n * 1000) / 10}%`;
+const family = familyMembers(rootOf(p.slug));
+const megas = availableMegas.filter((m) => m.slug === p.slug);
+const biomeCount = new Set(p.spawns.flatMap((s) => s.biomes)).size;
+const metaDesc = `${p.es} (#${p.id}, tipo ${p.types.map((t) => TYPES[t]?.[0] ?? t).join('/')}) en Cobblemon: ${
+  p.spawns.length ? `aparece en ${biomeCount} biomas, con su rareza, horario y condiciones` : 'no aparece salvaje'
+}; evoluciones${megas.length ? ', megaevolución' : ''} y grupo huevo para criar en Diosesmon.`;
+const fusions = FUSIONS.filter((f) => (f.a === p.slug || f.b === p.slug) && bySlug.has(f.a) && bySlug.has(f.b));
+const interactions = (interactionData as Interaction[]).filter((i) => i.slug === p.slug);
+---
+
+<Base
+  title={`${p.es}: dónde aparece, evoluciones y crianza`}
+  description={metaDesc}
+  image={`/img/art/${p.id}.webp`}
+  breadcrumbs={[{ name: 'Pokédex', path: '/pokedex/' }, { name: p.es, path: `/pokemon/${p.slug}/` }]}
+>
+  <nav class="crumbs"><a href="/pokedex/"><Icon name="left" /> Pokédex</a></nav>
+
+  <section class="hero" style={`--c: ${mainColor}`}>
+    <img src={`/img/art/${p.id}.webp`} alt={`${p.es}, ilustración oficial`} width="320" height="320" data-vt={`mon-${p.id}`} data-vt-hero />
+    <div>
+      <p class="num">{num(p.id)} · Generación {p.gen}</p>
+      <h1>{p.es}</h1>
+      {p.en !== p.es && <p class="en">{p.en}</p>}
+      <div class="chips">{p.types.map((t) => <TypeChip type={t} />)}</div>
+      {
+        p.cats.length > 0 && (
+          <div class="chips">
+            {p.cats.map((c) => (
+              <span class="tag">{CATEGORIES[c]}</span>
+            ))}
+          </div>
+        )
+      }
+    </div>
+  </section>
+
+  <section class="facts">
+    <div class="fact">
+      <h2>Grupo huevo</h2>
+      <p>{p.egg.map((e) => EGG[e] ?? e).join(' · ')}</p>
+      <small><Icon name={canBreed ? 'check' : 'close'} size={15} /> {canBreed ? 'Puede criar' : 'No puede criar'}</small>
+    </div>
+    <div class="fact">
+      <h2>Género</h2>
+      {
+        p.male < 0 ? (
+          <p>Sin género</p>
+        ) : (
+          <>
+            <div class="gender" style={`--m: ${p.male * 100}%`} aria-hidden="true" />
+            <p>
+              <span class="male">Macho {pct(p.male)}</span> · <span class="female">Hembra {pct(1 - p.male)}</span>
+            </p>
+          </>
+        )
+      }
+    </div>
+    <div class="fact">
+      <h2>Ratio de captura</h2>
+      <p>{p.catchRate} <small>/ 255</small></p>
+      <small>{p.catchRate >= 150 ? 'Fácil' : p.catchRate >= 60 ? 'Normal' : p.catchRate >= 25 ? 'Difícil' : 'Muy difícil'} de capturar</small>
+    </div>
+  </section>
+
+  {
+    family.length > 1 && (
+      <section class="evo">
+        <h2 class="section-title">Evoluciones</h2>
+        <EvoTree slug={family[0]} current={p.slug} />
+      </section>
+    )
+  }
+
+  {
+    megas.length > 0 && (
+      <section class="evo">
+        <h2 class="section-title">Mega Evolución</h2>
+        <div class="megas">
+          {megas.map((m) => (
+            <MegaCard m={m} />
+          ))}
+        </div>
+        <p class="more"><a href="/megas/">Cómo mega evolucionar <Icon name="right" /></a></p>
+      </section>
+    )
+  }
+
+  {
+    fusions.length > 0 && (
+      <section class="evo">
+        <h2 class="section-title">Fusiones</h2>
+        <div class="megas">
+          {fusions.map((f) => (
+            <FusionCard f={f} />
+          ))}
+        </div>
+        <p class="more"><a href="/fusiones/">Cómo fusionar <Icon name="right" /></a></p>
+      </section>
+    )
+  }
+
+  {
+    interactions.length > 0 && (
+      <section class="evo">
+        <h2 class="section-title">Interacciones</h2>
+        <div class="ints">
+          {interactions.map((i) => (
+            <InteractionWay i={i} />
+          ))}
+        </div>
+        <p class="more"><a href="/interacciones/">Cómo funcionan las interacciones <Icon name="right" /></a></p>
+      </section>
+    )
+  }
+
+  <section>
+    <h2 class="section-title">Dónde aparece</h2>
+    {
+      groups.length === 0 ? (
+        <p class="empty">
+          {p.es} no aparece en estado salvaje. Se obtiene por evolución, crianza, eventos u otros métodos del servidor.
+        </p>
+      ) : (
+        groups.map((g) => (
+          <details class="group" open>
+            <summary>
+              <span class="icon"><Icon name={g.icon} size={20} /></span> {g.name} <span class="count">{g.rows.length}</span>
+              <small>{g.help}</small>
+            </summary>
+            <ul class="spawns">
+              {g.rows.map(({ s, conds }) => {
+                const [bName, bColor] = s.alpha ? ['Alfa', BUCKETS.boss[1]] : BUCKETS[s.bucket];
+                return (
+                  <li class="spawn">
+                    <div class="spawn-head">
+                      <span class="rarity" style={`--r: ${bColor}`}>{bName}</span>
+                      {s.lvl && <span class="lvl">Nv. {s.lvl.replace('-', '–')}</span>}
+                      <span class="weight" title="Peso: a mayor peso, más probable dentro de su rareza">peso {s.w}</span>
+                    </div>
+                    <div class="zones">
+                      <BiomeList biomes={s.biomes} zones={s.zones} />
+                      {s.except && <span class="except">Excepto: {s.except.map((z) => label(ZONES, z)).join(', ')}</span>}
+                    </div>
+                    {(conds.length > 0 || s.moon || s.places || s.lure || s.noLure) && (
+                      <ul class="conds">
+                        {conds.map((c) => (
+                          <li>{c}</li>
+                        ))}
+                        {s.moon && (
+                          <li>
+                            <MoonChip value={s.moon} />
+                          </li>
+                        )}
+                        {s.places?.map((pl) => (
+                          <li>
+                            <PlaceChip place={pl} />
+                          </li>
+                        ))}
+                        {(s.lure || s.noLure) && (
+                          <li>
+                            <Tip>
+                              <Icon name="fish" size={15} /> {s.lure ? `Caña con Atracción ${s.lure}+` : 'Caña sin Atracción'}
+                              <Fragment slot="tip">
+                                <span class="tip-title">Encantamiento Atracción</span>
+                                <span class="tip-line">
+                                  {s.lure
+                                    ? `Tu Poké Caña necesita el encantamiento Atracción de nivel ${s.lure} o más (mesa de encantamientos, o libro encantado + yunque).`
+                                    : 'Solo sale si tu Poké Caña NO tiene el encantamiento Atracción.'}
+                                </span>
+                              </Fragment>
+                            </Tip>
+                          </li>
+                        )}
+                      </ul>
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
+          </details>
+        ))
+      )
+    }
+
+    <details class="legend">
+      <summary>¿Cómo funciona la rareza?</summary>
+      <p>
+        Cada vez que el juego genera un Pokémon primero elige una <strong>categoría de rareza</strong> y luego, entre los
+        Pokémon de esa categoría que cumplen las condiciones del lugar, elige uno según su <strong>peso</strong> (a mayor
+        peso, más probable).
+      </p>
+      <ul>
+        {
+          Object.entries(meta.world).map(([k, v]) => (
+            <li>
+              <span class="rarity" style={`--r: ${BUCKETS[k][1]}`}>{BUCKETS[k][0]}</span> {v}% en el mundo
+            </li>
+          ))
+        }
+      </ul>
+      <p>Al pescar, los cebos y el encantamiento Atracción de la Poké Caña cambian qué Pokémon pueden salir.</p>
+    </details>
+  </section>
+
+  <nav class="pager">
+    {prev ? <a href={`/pokemon/${prev.slug}/`}><Icon name="left" /> {num(prev.id)} {prev.es}</a> : <span />}
+    {next && <a href={`/pokemon/${next.slug}/`}>{num(next.id)} {next.es} <Icon name="right" /></a>}
+  </nav>
+</Base>
+
+<style>
+  .ints {
+    display: grid;
+    gap: 12px;
+  }
+  .crumbs a,
+  .pager a {
+    color: var(--muted);
+    text-decoration: none;
+  }
+  .crumbs a:hover,
+  .pager a:hover {
+    color: var(--text);
+  }
+  .hero {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px 28px;
+    margin: 12px 0 20px;
+    padding: 16px;
+    border-radius: var(--radius);
+    background: radial-gradient(circle at 20% 40%, color-mix(in srgb, var(--c) 35%, transparent), transparent 60%),
+      var(--surface);
+    border: 1px solid var(--border);
+  }
+  .hero img {
+    width: min(240px, 60vw);
+    margin: 0 auto;
+    filter: drop-shadow(0 8px 18px rgb(0 0 0 / 0.5));
+  }
+  .hero > div {
+    flex: 1 1 260px;
+  }
+  .num {
+    margin: 0;
+    color: var(--muted);
+    font: 600 0.95rem var(--font-title);
+  }
+  h1 {
+    font-size: clamp(2rem, 7vw, 3rem);
+    margin: 0;
+  }
+  .en {
+    margin: 0 0 8px;
+    color: var(--muted);
+  }
+  .chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 8px;
+  }
+  .tag {
+    padding: 2px 10px;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    font-size: 0.8rem;
+    color: var(--muted);
+  }
+  .facts {
+    display: grid;
+    gap: 12px;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    margin-bottom: 28px;
+  }
+  .fact {
+    padding: 14px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+  }
+  .fact h2 {
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--muted);
+  }
+  .fact p {
+    margin: 0;
+    font-weight: 600;
+  }
+  .fact small {
+    color: var(--muted);
+  }
+  .gender {
+    height: 8px;
+    margin: 6px 0;
+    border-radius: 99px;
+    background: linear-gradient(90deg, #4f8ff7 var(--m), #f06292 var(--m));
+  }
+  .male {
+    color: #6ea4ff;
+  }
+  .female {
+    color: #f48fb1;
+  }
+  .section-title {
+    font-size: 1.5rem;
+  }
+  .empty {
+    padding: 16px;
+    background: var(--surface);
+    border: 1px dashed var(--border);
+    border-radius: var(--radius);
+  }
+  .group {
+    margin-bottom: 14px;
+  }
+  .group > summary {
+    cursor: pointer;
+    padding: 10px 0;
+    font: 600 1.15rem var(--font-title);
+  }
+  .group > summary small {
+    display: block;
+    margin-left: 30px;
+    font: 400 0.85rem var(--font-body);
+    color: var(--muted);
+  }
+  .count {
+    padding: 0 8px;
+    border-radius: 99px;
+    background: var(--surface-2);
+    font-size: 0.8rem;
+  }
+  .spawns {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    gap: 10px;
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 330px), 1fr));
+  }
+  .spawn {
+    padding: 12px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+  }
+  .spawn-head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .rarity {
+    padding: 1px 10px;
+    border-radius: 99px;
+    background: color-mix(in srgb, var(--r) 22%, transparent);
+    color: var(--r);
+    border: 1px solid color-mix(in srgb, var(--r) 50%, transparent);
+    font: 600 0.8rem var(--font-title);
+  }
+  .lvl {
+    font-weight: 600;
+    font-size: 0.9rem;
+  }
+  .weight {
+    margin-left: auto;
+    font-size: 0.75rem;
+    color: var(--muted);
+  }
+  .zones {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 10px;
+  }
+  .except {
+    font-size: 0.8rem;
+    color: #ff8a80;
+  }
+  .conds {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin: 8px 0 0;
+    padding: 0;
+    list-style: none;
+  }
+  .conds li {
+    padding: 2px 8px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    font-size: 0.8rem;
+    color: #d6dae4;
+  }
+  .evo {
+    margin-bottom: 28px;
+  }
+  .megas {
+    display: grid;
+    gap: 12px;
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 340px), 1fr));
+  }
+  .more a {
+    color: var(--muted);
+    font-size: 0.9rem;
+  }
+  .legend {
+    margin-top: 20px;
+    padding: 12px 14px;
+    background: var(--surface);
+    border-radius: var(--radius);
+    font-size: 0.9rem;
+  }
+  .legend summary {
+    cursor: pointer;
+    font-weight: 600;
+  }
+  .legend ul {
+    list-style: none;
+    padding: 0;
+    display: grid;
+    gap: 6px;
+  }
+  .pager {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    margin-top: 32px;
+    font-size: 0.9rem;
+  }
+</style>

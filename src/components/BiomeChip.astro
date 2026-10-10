@@ -1,0 +1,45 @@
+---
+import Tip from './Tip.astro';
+import biomeData from '../data/biomes.json';
+import type { Biome } from '../data/types';
+
+interface Props {
+  i: number; // índice en biomes.json
+}
+const b = (biomeData as Biome[])[Astro.props.i];
+const DIM = { overworld: 'Overworld', nether: 'Nether', end: 'End' };
+---
+
+<Tip>
+  <span class="biome">
+    <img src={`/img/biome/${b.id}.webp`} alt="" width="36" height="20" loading="lazy" />
+    {b.es}
+  </span>
+  <Fragment slot="tip">
+    <img src={`/img/biome/${b.id}.webp`} alt={b.es} width="320" height="180" loading="lazy" />
+    <span class="tip-title">{b.es}</span>
+    <span class="tip-line">Bioma del {DIM[b.dim]} · <code>minecraft:{b.id}</code></span>
+  </Fragment>
+</Tip>
+
+<style>
+  .biome {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 2px 8px 2px 2px;
+    border-radius: 8px;
+    background: var(--surface-2);
+    font-size: 0.82rem;
+  }
+  .biome img {
+    width: 36px;
+    height: 20px;
+    object-fit: cover;
+    border-radius: 6px;
+  }
+  code {
+    font-size: 0.75rem;
+    color: var(--muted);
+  }
+</style>

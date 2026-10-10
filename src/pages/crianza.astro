@@ -1,0 +1,2312 @@
+---
+import Base from '../layouts/Base.astro';
+import ItemChip from '../components/ItemChip.astro';
+import Icon from '../components/Icon.astro';
+import itemData from '../data/items.json';
+import { BUCKETS, EGG } from '../data/labels';
+import { all, rootOf } from '../lib/evo';
+import { GENDER_PRICE, ITEM_PRICE } from '../lib/breeding';
+import { HARD_TO_FIND, RECOMMENDED } from '../data/crianza';
+import { icon } from '../lib/icons';
+import type { Item } from '../data/types';
+
+const items = itemData as Record<string, Item>;
+
+// Grupos huevo de la familia (si es un bebé sin grupo, se usan los de su evolución)
+const familyEgg = new Map<string, string[]>();
+for (const p of all) {
+  const root = rootOf(p.slug);
+  if (!p.egg.includes('undiscovered') && !familyEgg.has(root)) familyEgg.set(root, p.egg);
+}
+const bucketRank = ['common', 'uncommon', 'rare', 'ultra-rare'];
+// Qué tan fácil es conseguirlo: primero la rareza (Común > Poco común…), luego el ratio de captura (pesa mucho)
+// y después cuánto aparece (peso de sus spawns de esa rareza × biomas donde sale).
+const easy = (p: (typeof all)[number]) => {
+  const tier = Math.min(...p.spawns.map((s) => bucketRank.indexOf(s.bucket)).filter((i) => i >= 0));
+  if (!Number.isFinite(tier)) return 0;
+  const reach = p.spawns.filter((s) => s.bucket === bucketRank[tier]).reduce((t, s) => t + s.w * s.biomes.length, 0);
+  return (bucketRank.length - tier) * 100 + (p.catchRate / 255) ** 2 * Math.log1p(reach);
+};
+const species = all.map((p) => {
+  const buckets = p.spawns.map((s) => s.bucket).filter((b) => bucketRank.includes(b));
+  return {
+    slug: p.slug,
+    id: p.id,
+    es: p.es,
+    en: p.en,
+    root: rootOf(p.slug),
+    egg: familyEgg.get(rootOf(p.slug)) ?? p.egg,
+    male: p.male,
+    catchRate: p.catchRate,
+    bucket: buckets.sort((a, b) => bucketRank.indexOf(a) - bucketRank.indexOf(b))[0] ?? '',
+    score: easy(p),
+    hard: HARD_TO_FIND.includes(p.slug),
+  };
+});
+
+const STAT_INFO = [
+  ['hp', 'PS', 'PS', 'power_weight', '#4caf50'],
+  ['attack', 'Ataque', 'Atq', 'power_bracer', '#f44336'],
+  ['defence', 'Defensa', 'Def', 'power_belt', '#ff9800'],
+  ['special_attack', 'At. Esp.', 'AtE', 'power_lens', '#9c27b0'],
+  ['special_defence', 'Def. Esp.', 'DfE', 'power_band', '#fdd835'],
+  ['speed', 'Velocidad', 'Vel', 'power_anklet', '#4fc3f7'],
+].map(([key, name, short, item, color]) => ({ key, name, short, color, ink: ['attack', 'special_attack'].includes(key) ? '#fff' : '#111', item: items[`cobblemon:${item}`].es, icon: items[`cobblemon:${item}`].icon }));
+
+// recomendaciones manuales por familia (src/data/crianza.ts)
+const recommended = Object.fromEntries(Object.entries(RECOMMENDED).map(([k, v]) => [rootOf(k), v]));
+const clientData = { recommended, species, stats: STAT_INFO, egg: EGG, buckets: BUCKETS, itemPrice: ITEM_PRICE, genderPrice: GENDER_PRICE };
+---
+
+<Base breadcrumbs={[{ name: 'Crianza 6x31', path: '/crianza/' }]} title="Crianza 6x31: planificador de IVs perfectos paso a paso" description="Planificador de crianza 6x31 para el servidor Diosesmon: pirámide visual paso a paso, pareja recomendada, objetos Recios y costo aproximado.">
+  <h1 data-vt="sec-crianza" data-vt-hero>Crianza 6x31</h1>
+  <p class="intro">
+    Elige el Pokémon, los IVs que quieres y los Pokémon que ya tienes: armamos la pirámide paso a paso, con lo que lleva cada padre y
+    cuánto cuesta. Tu progreso se guarda solo en este navegador.
+  </p>
+
+  <details class="howto">
+    <summary>¿Cómo funciona la crianza en Diosesmon?</summary>
+    <ol>
+      <li>Abre la <strong>Guardería</strong> del PokePad y elige una <strong>hembra</strong> y un <strong>macho</strong> que compartan un <strong>grupo huevo</strong> (Ditto cría con cualquiera).</li>
+      <li>El huevo es de la especie de la <strong>hembra</strong> (o del que no es Ditto). Por eso la pareja puede ser un Pokémon fácil de atrapar.</li>
+      <li>
+        Cada padre lleva el <strong>objeto Recio</strong> del IV que el otro no tiene: el huevo junta los IVs 31 de los dos. Ej.: 1x31 en Ataque
+        <ItemChip id="cobblemon:power_bracer" /> + 1x31 en Defensa <ItemChip id="cobblemon:power_belt" /> → 2x31.
+      </li>
+      <li>Los dos padres comparten todos sus 31 menos uno: 2x31 + 2x31 → 3x31 … y dos 5x31 → <strong>6x31</strong>.</li>
+      <li><Icon name="alert" /> <strong>Los padres y sus objetos se pierden</strong> al recoger el huevo. Cada objeto cuesta <strong>{ITEM_PRICE}</strong> y elegir el género del huevo <strong>{GENDER_PRICE}</strong> Pokédólares.</li>
+      <li>La naturaleza no hace falta criarla: cámbiala al final con una <strong>Menta</strong>.</li>
+    </ol>
+  </details>
+
+  <section>
+    <div class="panel">
+      <h2><span class="n">1</span> ¿Qué Pokémon quieres criar?</h2>
+      <input id="search" type="search" placeholder="Buscar Pokémon… (ej. Ralts)" aria-label="Buscar Pokémon" autocomplete="off" />
+      <div id="results" class="results"></div>
+      <div id="target"></div>
+    </div>
+
+    <div class="panel" id="p-stats" hidden>
+      <h2><span class="n">2</span> IVs perfectos (31) que quieres</h2>
+      <div id="stats" class="stats"></div>
+      <p class="hint" id="stats-hint"></p>
+    </div>
+
+    <div class="panel" id="p-partner" hidden>
+      <h2><span class="n">3</span> Pareja para criar</h2>
+      <p class="hint" id="partner-hint"></p>
+      <div id="partners" class="partners"></div>
+    </div>
+
+    <div class="panel" id="p-inv" hidden>
+      <h2><span class="n">4</span> Tus Pokémon con 1x31</h2>
+      <p class="hint">
+        Cada Pokémon de la base necesita <strong>31 en un solo IV</strong>. Anota cuántos machos y hembras tienes de cada uno: el IV del que
+        más tengas va arriba (el que más se usa). Puedes cambiar el orden con las flechas.
+      </p>
+      <button type="button" id="auto" class="auto">Asignar automáticamente</button>
+      <div id="inv" class="inv"></div>
+      <p class="hint" id="inv-note"></p>
+    </div>
+
+    <div class="panel" id="p-gender" hidden>
+      <h2><span class="n">5</span> Género de los huevos</h2>
+      <p class="hint">Elegir el género cuesta {GENDER_PRICE}; dejarlo al azar es gratis.</p>
+      <div id="strategy" class="opts strat" role="radiogroup" aria-label="Estrategia de género"></div>
+      <p class="hint" id="strategy-hint"></p>
+      <h3 class="sub">Pokémon final</h3>
+      <div id="genders" class="opts"></div>
+    </div>
+  </section>
+
+  <section id="plan" hidden>
+    <div class="panel">
+      <h2>Resumen y costo aproximado</h2>
+      <div id="summary"></div>
+    </div>
+
+    <div class="panel work">
+      <h2>Pirámide paso a paso</h2>
+      <p class="hint">Arrastra para moverte y usa la rueda del mouse o dos dedos para acercar. Toca un paso para ir a él.</p>
+      <div class="views" role="group" aria-label="Forma del esquema">
+        <button type="button" data-view="tree" set:html={`${icon('tree')} Pirámide`} />
+        <button type="button" data-view="bracket" set:html={`${icon('bracket')} Llaves`} />
+      </div>
+      <div class="stepper">
+        <button type="button" class="nav-btn" id="prev" aria-label="Paso anterior" set:html={icon('left', 30)} />
+        <div class="cur">
+          <button type="button" id="cur" class="cur-btn" aria-haspopup="listbox" aria-expanded="false">
+            <span class="cur-text"><strong id="cur-title"></strong><small id="cur-sub"></small></span>
+            <span class="caret" aria-hidden="true" set:html={icon('down')} />
+          </button>
+          <div class="menu" id="menu" hidden>
+            <input type="search" id="menu-q" placeholder="Buscar: número, Pokémon o nivel (ej. 3x31)…" aria-label="Buscar paso" autocomplete="off" />
+            <ul id="menu-list" role="listbox"></ul>
+          </div>
+        </div>
+        <button type="button" class="nav-btn" id="next" aria-label="Paso siguiente" set:html={icon('right', 30)} />
+      </div>
+      <div class="timeline" id="timeline">
+        <div class="rail"><span class="fill" id="fill"></span></div>
+        <div id="ticks"></div>
+        <input type="range" id="slider" min="0" max="1" step="1" value="0" aria-label="Línea de tiempo de pasos" />
+      </div>
+      <div class="board">
+        <div class="viewport" id="viewport">
+          <div class="world" id="world"></div>
+          <div class="zoom">
+            <button type="button" id="zin" aria-label="Acercar">＋</button>
+            <button type="button" id="zout" aria-label="Alejar">－</button>
+            <button type="button" id="zfit" aria-label="Ver toda la pirámide">⤢</button>
+          </div>
+        </div>
+        <aside class="detail" id="detail" aria-live="polite"></aside>
+      </div>
+      <div class="progress"><span id="bar"></span></div>
+      <p id="progress-text" class="hint"></p>
+      <div class="actions">
+        <button type="button" id="export" set:html={`${icon('save')} Guardar en archivo`} />
+        <label class="btn"><Fragment set:html={icon('open')} /> Cargar archivo<input type="file" id="import" accept="application/json,.json" hidden /></label>
+        <button type="button" id="reset" class="ghost" set:html={`${icon('trash')} Empezar de nuevo`} />
+      </div>
+    </div>
+  </section>
+
+  <script type="application/json" id="breed-data" set:html={JSON.stringify(clientData)} />
+</Base>
+
+<script>
+  import {
+    STATS,
+    bestOrder,
+    buildPlan,
+    costOf,
+    fixedGender,
+    flatten,
+    layout,
+    modeOf,
+    fitInventory,
+    planGenders,
+    type Fit,
+    type GenderPlan,
+    type Strategy,
+    type Gender,
+    type Inventory,
+    type Node,
+    type Stat,
+    type View,
+  } from '../lib/breeding';
+  import { icon } from '../lib/icons';
+
+  interface Sp {
+    slug: string;
+    id: number;
+    es: string;
+    en: string;
+    root: string;
+    egg: string[];
+    male: number;
+    catchRate: number;
+    bucket: string;
+    score: number;
+    hard: boolean; // difícil de encontrar en el servidor (src/data/crianza.ts)
+  }
+  interface StatInfo {
+    key: Stat;
+    name: string;
+    short: string;
+    color: string;
+    ink: string; // color del texto sobre `color`
+    item: string;
+    icon: string;
+  }
+  const data = JSON.parse(document.getElementById('breed-data')!.textContent!) as {
+    recommended: Record<string, string[]>;
+    species: Sp[];
+    stats: StatInfo[];
+    egg: Record<string, string>;
+    buckets: Record<string, [string, string]>;
+    itemPrice: number;
+    genderPrice: number;
+  };
+  const bySlug = new Map(data.species.map((s) => [s.slug, s]));
+  const statInfo = new Map(data.stats.map((s) => [s.key, s]));
+  const $ = (id: string) => document.getElementById(id)!;
+  const fold = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
+  const money = (n: number) => `${n.toLocaleString('es-MX')} ₽`;
+  const thumb = (slug: string) => `/img/thumb/${bySlug.get(slug)?.id ?? 132}.webp`;
+  const nameOf = (slug: string) => bySlug.get(slug)?.es ?? slug;
+  const breedable = (s: Sp) => !s.egg.includes('undiscovered') && s.egg.length > 0;
+  const bothGenders = (slug: string) => {
+    const m = bySlug.get(slug)?.male ?? -1;
+    return m > 0 && m < 1;
+  };
+  // símbolo de género en círculo de color (♂ azul, ♀ rosa)
+  const svg = (path: string) => `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="#fff" stroke-width="2.6" stroke-linecap="round">${path}</svg>`;
+  const gs = {
+    m: `<b class="gs m" title="Macho" aria-label="machos">${svg('<circle cx="10" cy="14" r="6"/><path d="M14.5 9.5 20 4M14 4h6v6"/>')}</b>`,
+    f: `<b class="gs f" title="Hembra" aria-label="hembras">${svg('<circle cx="12" cy="9" r="6"/><path d="M12 15v7M8.5 19h7"/>')}</b>`,
+  };
+  const GENDER_ICON: Record<string, string> = {
+    M: gs.m,
+    F: gs.f,
+    N: '<b class="gs n" title="Sin género">–</b>',
+    '': '<b class="gs x" title="Al azar: todavía no se sabe">?</b>',
+  };
+  const GENDER_WORD: Record<string, string> = { M: 'macho', F: 'hembra', N: 'sin género', '': 'al azar' };
+
+  // ---------- estado (se guarda en este navegador) ----------
+  interface State {
+    v: 2;
+    target: string;
+    stats: Stat[];
+    order: Stat[]; // de más a menos usado (16, 8, 4, 2, 1, 1)
+    manual: boolean; // el jugador cambió el orden a mano
+    inv: Inventory;
+    partner: string;
+    final: Gender;
+    strategy: Strategy; // ahorro (al azar cuando se pueda) o elegir siempre
+    results: Record<string, 'M' | 'F'>; // lo que salió en los huevos al azar
+    done: string[];
+    view: View; // pirámide o llaves
+  }
+  const KEY = 'crianza-v1';
+  const blank = (): State => ({ v: 2, target: '', stats: [...STATS], order: [...STATS], manual: false, inv: {}, partner: '', final: '', strategy: 'save', results: {}, done: [], view: 'tree' });
+  let state = blank();
+  const count = (v: unknown) => Math.max(0, Math.min(999, Math.floor(Number(v) || 0)));
+
+  /** Valida un estado (de localStorage o de un archivo): solo acepta valores conocidos. */
+  function sanitize(raw: any): State | null {
+    if (!raw || typeof raw !== 'object' || !bySlug.has(raw.target)) return null;
+    const stats = STATS.filter((s) => Array.isArray(raw.stats) && raw.stats.includes(s));
+    const set = stats.length ? stats : [...STATS];
+    const order = Array.isArray(raw.order) ? set.slice().sort((a, b) => raw.order.indexOf(a) - raw.order.indexOf(b)) : set;
+    const inv: Inventory = {};
+    for (const s of STATS) if (raw.inv?.[s]) inv[s] = { m: count(raw.inv[s].m), f: count(raw.inv[s].f) };
+    return {
+      v: 2,
+      target: raw.target,
+      stats: set,
+      order,
+      manual: raw.manual === true,
+      inv,
+      partner: bySlug.has(raw.partner) ? raw.partner : '',
+      final: ['M', 'F', ''].includes(raw.final) ? raw.final : '',
+      strategy: raw.strategy === 'safe' ? 'safe' : 'save',
+      results: Object.fromEntries(
+        Object.entries(raw.results ?? {}).filter(([k, v]) => /^N\d-\d+$/.test(k) && (v === 'M' || v === 'F')),
+      ) as State['results'],
+      view: raw.view === 'bracket' ? 'bracket' : 'tree',
+      done: Array.isArray(raw.done) ? raw.done.filter((d: unknown) => typeof d === 'string' && /^N\d-\d+$/.test(d)) : [],
+    };
+  }
+  function save() {
+    try {
+      localStorage.setItem(KEY, JSON.stringify(state));
+    } catch {}
+  }
+  try {
+    state = sanitize(JSON.parse(localStorage.getItem(KEY) ?? 'null')) ?? state;
+  } catch {}
+
+  // ---------- piezas visuales ----------
+  const chip = ([label, color]: [string, string]) => `<span class="pill" style="--c:${color}">${label}</span>`;
+  const statChip = (s: Stat) => {
+    const i = statInfo.get(s)!;
+    return `<span class="pill" style="--c:${i.color}">${i.name}</span>`;
+  };
+  const statDots = (stats: Stat[]) =>
+    `<span class="dots">${data.stats
+      .map((s) => `<i class="${stats.includes(s.key) ? 'on' : ''}" style="--c:${s.color};--ink:${s.ink}" title="${s.name}${stats.includes(s.key) ? ': 31' : ''}">${s.short}</i>`)
+      .join('')}</span>`;
+  const itemTag = (stat: Stat) => {
+    const s = statInfo.get(stat)!;
+    return `<span class="held"><img src="${s.icon}" alt="" width="20" height="20" />Lleva <strong>${s.item}</strong></span>`;
+  };
+  const monCard = (n: Node) => `
+    <span class="mon">
+      <span class="sid">${n.id}</span>
+      <img src="${thumb(n.species)}" alt="" width="56" height="56" />
+      <span class="who"><strong>${nameOf(n.species)}</strong> ${GENDER_ICON[n.gender]}</span>
+      ${statDots(n.stats)}
+    </span>`;
+
+  // ---------- 1. buscar Pokémon ----------
+  const search = $('search') as HTMLInputElement;
+  search.addEventListener('input', () => {
+    const q = fold(search.value).replace(/^#0*/, '');
+    const list = q ? data.species.filter((s) => fold(`${s.es} ${s.en}`).includes(q) || String(s.id) === q).slice(0, 24) : [];
+    $('results').innerHTML = list
+      .map((s) => `<button type="button" data-slug="${s.slug}"><img src="${thumb(s.slug)}" alt="" width="48" height="48" /><span>${s.es}</span></button>`)
+      .join('');
+  });
+  $('results').addEventListener('click', (e) => {
+    const b = (e.target as HTMLElement).closest('button');
+    if (!b) return;
+    if (state.done.length && !confirm('Cambiar de Pokémon borra el progreso marcado. ¿Continuar?')) return;
+    state = { ...blank(), inv: state.inv, view: state.view, target: b.dataset.slug! };
+    search.value = '';
+    $('results').innerHTML = '';
+    selected = '';
+    showAll = false;
+    eggFilter = '';
+    render(true);
+  });
+
+  /** Todas las parejas posibles: primero las elegidas a mano, luego las más fáciles; las difíciles en el servidor al final. */
+  function partnersFor(t: Sp) {
+    const manual = data.recommended[t.root] ?? [];
+    const rank = (s: Sp) => (manual.includes(s.slug) ? manual.indexOf(s.slug) - 1e6 : 0);
+    return data.species
+      .filter((s) => breedable(s) && bothGenders(s.slug) && (s.score > 0 || manual.includes(s.slug)) && s.egg.some((g) => t.egg.includes(g)))
+      .sort((a, b) => rank(a) - rank(b) || Number(a.hard) - Number(b.hard) || b.score - a.score);
+  }
+  let showAll = false; // lista completa de parejas
+  let eggFilter = ''; // ver solo las parejas de un grupo huevo
+
+  // ---------- plan actual ----------
+  let plan: Node;
+  let invFit: Fit; // cómo encajan los Pokémon base del jugador
+  let gplan: GenderPlan; // qué huevos se pagan y cuáles van al azar
+  let nodes: Node[] = [];
+  let steps: Node[] = []; // crianzas en orden: Paso 1 … Paso N
+  let selected = ''; // id del paso abierto ('' = preparación)
+
+  const fitOf = (root: Node) => fitInventory(root, state.target, state.strategy, state.inv);
+  const planWith = (order: Stat[]) => {
+    const t = bySlug.get(state.target)!;
+    return buildPlan(order, t.slug, t.male, state.partner, state.final);
+  };
+
+  // ---------- pintar ----------
+  function render(fit = false) {
+    const t = bySlug.get(state.target);
+    const panels = ['p-stats', 'p-partner', 'p-inv', 'p-gender', 'plan'];
+    for (const id of panels) $(id).hidden = !t;
+    if (!t) {
+      $('target').innerHTML = '';
+      return;
+    }
+    const mode = modeOf(t.male);
+    const root = bySlug.get(t.root)!;
+    const can = breedable(t);
+    $('target').innerHTML = `
+      <div class="picked">
+        <img src="/img/art/${t.id}.webp" alt="" width="120" height="120" />
+        <div>
+          <a href="/pokemon/${t.slug}/"><strong class="big">${t.es}</strong></a>
+          <div class="row">${t.egg.map((g) => `<span class="pill" style="--c:#6d5bd0">${icon('egg', 13)} ${data.egg[g] ?? g}</span>`).join('')}</div>
+          <div class="row small">${t.male < 0 ? 'Sin género' : t.male === 1 ? 'Solo macho' : t.male === 0 ? 'Solo hembra' : `${gs.m} ${Math.round(t.male * 100)}% · ${gs.f} ${Math.round((1 - t.male) * 100)}%`}</div>
+          ${root.slug !== t.slug ? `<div class="row small">${icon('egg', 14)} El huevo nace como <strong>${root.es}</strong> (sirve una hembra de cualquier etapa).</div>` : ''}
+          ${!can ? `<div class="warn">${icon('alert')} Este Pokémon no se puede criar (grupo huevo Desconocido).</div>` : ''}
+        </div>
+      </div>`;
+    if (!can) {
+      for (const id of panels) $(id).hidden = true;
+      return;
+    }
+
+    // 2. IVs
+    $('stats').innerHTML = data.stats
+      .map(
+        (s) => `<label class="stat" style="--c:${s.color}"><input type="checkbox" value="${s.key}" ${state.stats.includes(s.key) ? 'checked' : ''} />
+        <span><img src="${s.icon}" alt="" width="24" height="24" /><strong>${s.name}</strong><small>${s.item}</small></span></label>`,
+      )
+      .join('');
+    $('stats-hint').textContent = `Objetivo: ${state.stats.length}x31. Tip: si no usará ataques físicos, quita Ataque y necesitas la mitad de Pokémon.`;
+
+    // 3. pareja
+    const partners = mode === 'pair' ? partnersFor(t) : [];
+    if (mode === 'pair' && !partners.some((p) => p.slug === state.partner)) state.partner = partners[0]?.slug ?? t.slug;
+    if (mode === 'ditto') {
+      state.partner = 'ditto';
+      $('partner-hint').innerHTML = `${t.es} ${t.male < 0 ? 'no tiene género' : 'solo es macho'}: solo puede criar con <strong>Ditto</strong>. Ditto no se puede criar, así que los Ditto con varios 31 hay que atraparlos.`;
+      $('partners').innerHTML = `<div class="partner on"><img src="${thumb('ditto')}" alt="" width="64" height="64" /><span><strong>Ditto</strong></span></div>`;
+    } else {
+      const groups = t.egg.map((g) => `<strong>${data.egg[g] ?? g}</strong>`);
+      if (!t.egg.includes(eggFilter)) eggFilter = '';
+      const pool = eggFilter ? partners.filter((p) => p.egg.includes(eggFilter)) : partners;
+      $('partner-hint').innerHTML = `
+        <span>${t.es} pertenece ${t.egg.length > 1 ? `a <strong>${t.egg.length} grupos huevo</strong>: ${groups.join(' y ')}. Puede criar con cualquier Pokémon que comparta <strong>al menos uno</strong> de ellos` : `al grupo huevo ${groups[0]}. Puede criar con cualquier Pokémon de ese grupo`}.
+        Solo una hembra de la base tiene que ser ${t.es}; el resto usa la pareja. Ordenamos por las más comunes y fáciles de capturar:</span>
+        ${
+          t.egg.length > 1
+            ? `<span class="eggs">${[['', `Todos (${partners.length})`], ...t.egg.map((g) => [g, `${icon('egg', 14)} ${data.egg[g] ?? g} (${partners.filter((p) => p.egg.includes(g)).length})`])]
+                .map(([g, l]) => `<button type="button" data-egg="${g}" class="${eggFilter === g ? 'on' : ''}">${l}</button>`)
+                .join('')}</span>`
+            : ''
+        }`;
+      const shown = showAll ? pool : pool.slice(0, 6);
+      if (!showAll && !eggFilter && !shown.some((p) => p.slug === state.partner)) shown.push(partners.find((p) => p.slug === state.partner)!);
+      $('partners').innerHTML = shown
+        .map(
+          (p) => `<label class="partner ${p.slug === state.partner ? 'on' : ''}">
+          <input type="radio" name="partner" value="${p.slug}" ${p.slug === state.partner ? 'checked' : ''} />
+          <img src="${thumb(p.slug)}" alt="" width="64" height="64" />
+          <span><strong>${p.es}</strong>${p === partners[0] ? ` <span class="best">${icon('star', 14)} Recomendado</span>` : ''}
+          <span class="row">${p.bucket ? chip(data.buckets[p.bucket]) : ''}<span class="pill" style="--c:#555">Captura ${p.catchRate}</span>${p.hard ? `<span class="pill" style="--c:#c62828">${icon('alert', 13)} Difícil en el servidor</span>` : ''}</span>
+          <span class="row small">${icon('egg', 14)} ${p.egg.filter((g) => t.egg.includes(g)).map((g) => data.egg[g] ?? g).join(', ')} · <a href="/pokemon/${p.slug}/" target="_blank">dónde aparece ↗</a></span></span>
+        </label>`,
+        )
+        .join('') +
+        (pool.length > 6
+          ? `<button type="button" class="more" id="more">${showAll ? `${icon('up')} Mostrar solo las mejores` : `${icon('down')} Ver todas las parejas posibles (${pool.length})`}</button>`
+          : '');
+    }
+
+    // 4. orden de IVs según lo que tiene el jugador
+    state.order = state.manual ? state.stats.slice().sort((a, b) => state.order.indexOf(a) - state.order.indexOf(b)) : bestOrder(state.stats, planWith, (r) => fitOf(r).total, state.inv);
+    plan = planWith(state.order);
+    invFit = fitOf(plan);
+    gplan = planGenders(plan, { target: t.slug, strategy: state.strategy, results: state.results, final: state.final, both: bothGenders, fit: invFit });
+    for (const k of Object.keys(state.results)) if (!gplan.random.has(k)) delete state.results[k];
+    renderInventory(t);
+
+    // 5. género final
+    const fixed = fixedGender(t.male);
+    $('genders').innerHTML = fixed
+      ? `<span class="hint">${t.es} siempre nace ${GENDER_WORD[fixed]}.</span>`
+      : [
+          ['', 'Al azar (gratis)'],
+          ['F', `${gs.f} Hembra (+${data.genderPrice})`],
+          ['M', `${gs.m} Macho (+${data.genderPrice})`],
+        ]
+          .map(([v, l]) => `<label class="opt"><input type="radio" name="final" value="${v}" ${state.final === v ? 'checked' : ''} /><span>${l}</span></label>`)
+          .join('');
+    if (fixed) state.final = '';
+    $('strategy').innerHTML = (
+      [
+        ['save', icon('coin'), 'Ahorro (recomendado)'],
+        ['safe', icon('bolt'), 'Elegir siempre'],
+      ] as const
+    )
+      .map(([v, ic, l]) => `<label class="opt"><input type="radio" name="strategy" value="${v}" ${state.strategy === v ? 'checked' : ''} /><span>${ic} ${l}</span></label>`)
+      .join('');
+    $('strategy-hint').innerHTML =
+      modeOf(t.male) === 'ditto'
+        ? 'Con Ditto no hay géneros que elegir.'
+        : state.strategy === 'save'
+          ? `En cada par de hermanos que se cruzarán, el primero sale <strong>al azar</strong> (gratis): anotas qué salió y al segundo le eliges el género <strong>contrario</strong>. La línea de <strong>${t.es}</strong> siempre se paga, porque la hembra tiene que ser de esa especie.`
+          : 'Eliges el género de todos los huevos desde el principio: no esperas resultados, pero cuesta más.';
+
+    nodes = flatten(plan);
+    steps = nodes.filter((n) => n.parents);
+    const ids = new Set(steps.map((n) => n.id));
+    state.done = state.done.filter((d) => ids.has(d));
+    if (selected && !ids.has(selected)) selected = '';
+    renderSummary(t);
+    renderBoard(fit);
+    save();
+  }
+
+  /**
+   * Campo de cantidad: ♂ azul, ♀ rosa. Cuando ya tiene los que hacen falta (o ese IV no los necesita) la flecha de
+   * subir se desactiva y una burbuja explica por qué.
+   */
+  function field(s: Stat, g: 'm' | 'f', cap: number, have: number, tip: string, label: string) {
+    return `<label class="gin ${g} ${tip ? 'full' : ''}" ${tip ? `data-tip="${tip}"` : ''}>
+      ${g === 'm' ? gs.m : gs.f}
+      <input type="number" min="0" max="${Math.max(cap, have)}" inputmode="numeric" data-inv="${s}" data-g="${g}" value="${have || ''}" placeholder="0"
+        ${cap === 0 && !have ? 'disabled' : ''} aria-label="${label}" />
+    </label>`;
+  }
+
+  function renderInventory(t: Sp) {
+    const flexible = state.strategy === 'save' && modeOf(t.male) === 'pair';
+    $('inv').innerHTML = state.order
+      .map((s, i) => {
+        const need = invFit.need[s] ?? { m: 0, f: 0, n: 0 };
+        const miss = invFit.missing[s] ?? { m: 0, f: 0, n: 0 };
+        const have = state.inv[s] ?? { m: 0, f: 0 };
+        const total = need.m + need.f + need.n;
+        const info = statInfo.get(s)!;
+        const split = [need.m && `${need.m}${gs.m}`, need.f && `${need.f}${gs.f}`, need.n && `${need.n}`].filter(Boolean).join(' + ');
+        // en ahorro el género de la base es flexible: el tope es el total del IV, sin importar si son ♂ o ♀
+        const tipFor = (g: 'm' | 'f') => {
+          const word = g === 'm' ? 'machos' : 'hembras';
+          if (flexible) return have.m + have.f >= total ? `Ya tienes los ${total} Pokémon con 31 en ${info.name} que necesitas.` : '';
+          const n = need[g];
+          return n === 0 ? `Con este orden, ${info.name} no necesita ${word}.` : have[g] >= n ? `Ya tienes ${g === 'f' ? 'las' : 'los'} ${n} ${word} con 31 en ${info.name} que necesitas.` : '';
+        };
+        const capFor = (g: 'm' | 'f') => (flexible ? Math.max(0, total - have[g === 'm' ? 'f' : 'm']) : need[g] + (g === 'm' ? need.n : 0));
+        const missText = [miss.m && `${miss.m}${gs.m}`, miss.f && `${miss.f}${gs.f}`, miss.n && `${miss.n}`].filter(Boolean).join(' ');
+        return `<div class="inv-row" style="--c:${info.color};--ink:${info.ink}">
+          <span class="move">
+            <button type="button" data-move="${s}" data-dir="-1" ${i === 0 ? 'disabled' : ''} aria-label="Subir ${info.name}">${icon('up', 14)}</button>
+            <button type="button" data-move="${s}" data-dir="1" ${i === state.order.length - 1 ? 'disabled' : ''} aria-label="Bajar ${info.name}">${icon('down', 14)}</button>
+          </span>
+          <span class="inv-stat"><img src="${info.icon}" alt="" width="24" height="24" /><strong>${info.name}</strong><span class="x16">×${total}</span></span>
+          <span class="inv-need">Necesitas <strong>${split || '0'}</strong>${flexible && need.m && need.f ? ' <small>(o al revés)</small>' : ''}</span>
+          <span class="inv-have">
+            ${field(s, 'm', capFor('m'), have.m, tipFor('m'), `Machos con 31 en ${info.name}`)}${field(s, 'f', capFor('f'), have.f, tipFor('f'), `Hembras con 31 en ${info.name}`)}
+          </span>
+          <span class="inv-miss ${missText ? '' : 'ok'}">${missText ? `Faltan ${missText}` : `${icon('check')} Completo`}</span>
+        </div>`;
+      })
+      .join('');
+    const targetLeaf = flatten(plan).find((n) => !n.parents && n.species === t.slug && n.stats.length === 1);
+    $('inv-note').innerHTML = [
+      flexible ? `${icon('info')} En cada cruce de la base basta <strong>un macho y una hembra</strong>: repartimos tus Pokémon como mejor encajen.` : '',
+      targetLeaf
+        ? `${icon('target')} Una de las ${GENDER_WORD[targetLeaf.gender]}s con 31 en <strong>${statInfo.get(targetLeaf.stats[0])!.name}</strong> tiene que ser <strong>${nameOf(t.slug)}</strong>; las demás, ${nameOf(state.partner)}.`
+        : '',
+    ]
+      .filter(Boolean)
+      .map((x) => `<span>${x}</span>`)
+      .join('');
+    $('auto').toggleAttribute('disabled', !state.manual);
+    $('auto').innerHTML = state.manual ? `${icon('bolt')} Asignar automáticamente` : `${icon('check')} Asignado automáticamente`;
+  }
+
+  function renderSummary(t: Sp) {
+    const cost = costOf(plan, gplan.paid.size);
+    const missing = invFit.total;
+    // lo que costaría elegir el género de todos los huevos, para mostrar el ahorro
+    const allPaid = steps.filter((n) => n !== plan && bothGenders(n.species)).length + (state.final && bothGenders(plan.species) ? 1 : 0);
+    const saved = allPaid - gplan.paid.size;
+    const extra = nodes.filter((n) => !n.parents && n.stats.length > 1); // Ditto con varios 31
+    const itemCount = Object.values(cost.items).reduce((a, b) => a + b, 0);
+    $('summary').innerHTML = `
+      <div class="sum">
+        <div class="kpis">
+          <div class="kpi"><span class="k">Pokémon base</span><strong>${cost.catches - extra.length}</strong>
+            <small>${missing ? `Te faltan <b class="bad">${missing}</b>` : `<span class="good">${icon('check')} Completo</span>`}</small></div>
+          <div class="kpi"><span class="k">Crianzas</span><strong>${cost.breeds}</strong><small>pasos</small></div>
+          <div class="kpi"><span class="k">Elegir género</span><strong>${cost.genders}</strong><small>${money(cost.genders * data.genderPrice)}</small>${
+            saved > 0 ? `<small class="good">${gplan.random.size} al azar: ahorras ${money(saved * data.genderPrice)}</small>` : ''
+          }</div>
+        </div>
+        <div class="items">
+          <span class="k">Objetos Recios · ${itemCount} × ${data.itemPrice} = ${money(itemCount * data.itemPrice)}</span>
+          <div class="tiles">${(Object.entries(cost.items) as [Stat, number][])
+            .map(([s, c]) => { const i = statInfo.get(s)!; return `<span class="tile" style="--c:${i.color}"><img src="${i.icon}" alt="" width="32" height="32" /><b>×${c}</b><small>${i.item}</small></span>`; })
+            .join('')}</div>
+        </div>
+        <div class="total">
+          <span class="k">Costo total aproximado</span>
+          <strong>${money(cost.total)}</strong>
+          <small>Recios ${money(itemCount * data.itemPrice)} + géneros ${money(cost.genders * data.genderPrice)}</small>
+          <small>Sin contar la captura de los Pokémon base.</small>
+        </div>
+      </div>
+      ${extra.length ? `<p class="warn">Además necesitas: ${extra.map((n) => `Ditto ${n.stats.length}x31`).join(', ')} (solo atrapándolos).</p>` : ''}`;
+  }
+
+  // ---------- lienzo infinito ----------
+  const viewport = $('viewport');
+  const world = $('world');
+  let pos = new Map<string, { x: number; y: number }>();
+  const view = { x: 0, y: 0, k: 1 };
+  let anim = 0;
+  const draw = () => (world.style.transform = `translate(${view.x}px, ${view.y}px) scale(${view.k})`);
+  /** Mueve la cámara. La animación va con requestAnimationFrame: funciona aunque el sistema reduzca las animaciones CSS. */
+  function moveTo(to: typeof view, animate: boolean) {
+    cancelAnimationFrame(anim);
+    if (!animate) {
+      Object.assign(view, to);
+      return draw();
+    }
+    const from = { ...view };
+    const t0 = performance.now();
+    const frame = (t: number) => {
+      const p = Math.min(1, (t - t0) / 550);
+      const e = 1 - (1 - p) ** 3; // sale rápido y frena suave
+      view.x = from.x + (to.x - from.x) * e;
+      view.y = from.y + (to.y - from.y) * e;
+      view.k = from.k + (to.k - from.k) * e;
+      draw();
+      if (p < 1) anim = requestAnimationFrame(frame);
+    };
+    anim = requestAnimationFrame(frame);
+  }
+  /** Encuadra un grupo de nodos (o toda la pirámide). */
+  function focus(ids: string[], animate = true, maxK = 1.1) {
+    const pts = ids.map((id) => pos.get(id)!).filter(Boolean);
+    const xs = pts.map((p) => p.x);
+    const ys = pts.map((p) => p.y);
+    const pad = 110;
+    const [x0, x1, y0, y1] = [Math.min(...xs) - pad, Math.max(...xs) + pad, Math.min(...ys) - pad, Math.max(...ys) + pad];
+    const w = viewport.clientWidth;
+    const h = viewport.clientHeight;
+    const k = Math.max(0.05, Math.min(maxK, w / (x1 - x0), h / (y1 - y0)));
+    moveTo({ k, x: w / 2 - ((x0 + x1) / 2) * k, y: h / 2 - ((y0 + y1) / 2) * k }, animate);
+  }
+  const zoomAt = (factor: number, cx: number, cy: number, animate = false) => {
+    const k = Math.max(0.05, Math.min(2.5, view.k * factor));
+    moveTo({ k, x: cx - ((cx - view.x) * k) / view.k, y: cy - ((cy - view.y) * k) / view.k }, animate);
+  };
+
+  function renderBoard(fit: boolean) {
+    const tree = state.view === 'tree';
+    pos = layout(plan, tree ? 175 : 165, tree ? 240 : 310, state.view);
+    const stepNo = new Map(steps.map((n, i) => [n.id, i + 1]));
+    const width = Math.max(...[...pos.values()].map((p) => p.x)) + 200;
+    const height = Math.max(...[...pos.values()].map((p) => p.y)) + 200;
+    const W = 80; // mitad del ancho de la tarjeta
+    const H = 70; // mitad del alto
+    // líneas de cada padre a su hijo, del color del Recio que lleva el padre
+    let edges = '';
+    let tags = '';
+    for (const n of steps) {
+      const c = pos.get(n.id)!;
+      const done = state.done.includes(n.id);
+      for (const p of n.parents!) {
+        const a = pos.get(p.id)!;
+        const it = statInfo.get(p.item!)!;
+        const d = tree
+          ? `M${a.x},${a.y + H} C${a.x},${a.y + H + 90} ${c.x},${c.y - H - 90} ${c.x},${c.y - H}`
+          : `M${a.x + W},${a.y} C${a.x + W + 100},${a.y} ${c.x - W - 100},${c.y} ${c.x - W},${c.y}`;
+        edges += `<path data-step="${n.id}" class="${done ? 'done' : ''}" style="--c:${it.color}" d="${d}" />`;
+        const [ix, iy] = tree ? [a.x - 12, a.y + H + 6] : [a.x + W + 6, a.y - 12];
+        tags += `<img class="edge-item" data-step="${n.id}" src="${it.icon}" alt="" title="Lleva ${it.item}" width="24" height="24" style="left:${ix}px;top:${iy}px" />`;
+      }
+    }
+    // etiquetas de nivel: a la izquierda de cada fila (pirámide) o encima de cada columna (llaves)
+    const rows = plan.stats
+      .map((_, i) => (tree ? `<span class="lvl" style="left:-160px;top:${i * 240 - 14}px">${i + 1}x31</span>` : `<span class="lvl" style="left:${i * 310 - 28}px;top:-120px">${i + 1}x31</span>`))
+      .join('');
+    world.style.width = `${width}px`;
+    world.style.height = `${height}px`;
+    world.innerHTML = `
+      <svg class="edges" width="${width + 200}" height="${height + 200}" viewBox="-100 -100 ${width + 200} ${height + 200}" style="left:-100px;top:-100px">${edges}</svg>
+      ${rows}${tags}
+      ${nodes
+        .map((n) => {
+          const p = pos.get(n.id)!;
+          const no = stepNo.get(n.id);
+          const done = no ? state.done.includes(n.id) : false;
+          return `<button type="button" class="node g-${n.gender || 'x'} ${no ? 'bred' : 'base'} ${done ? 'done' : ''} ${n.id === plan.id ? 'goal' : ''}" data-node="${n.id}" style="left:${p.x - W}px;top:${p.y - H}px">
+            ${no ? `<span class="badge">Paso ${no}</span>` : ''}
+            ${monCard(n)}
+          </button>`;
+        })
+        .join('')}`;
+    document.querySelectorAll<HTMLButtonElement>('[data-view]').forEach((b) => b.classList.toggle('on', b.dataset.view === state.view));
+    renderSteps();
+    renderDetail();
+    highlight();
+    progress();
+    if (fit) requestAnimationFrame(() => focus(nodes.map((n) => n.id), false, 1));
+  }
+
+  const stepIndex = () => (selected ? steps.findIndex((n) => n.id === selected) + 1 : 0); // 0 = preparación
+  const idAt = (i: number) => (i <= 0 ? '' : steps[Math.min(i, steps.length) - 1].id);
+  const pairText = (n: Node) => {
+    const [f, m] = n.parents!;
+    return `${nameOf(m.species)} ${GENDER_ICON[m.gender]} × ${nameOf(f.species)} ${GENDER_ICON[f.gender]}`;
+  };
+
+  /** Selector de pasos: anterior / actual (menú con buscador) / siguiente + línea de tiempo deslizable. */
+  function renderSteps() {
+    const i = stepIndex();
+    const N = steps.length;
+    const n = steps[i - 1];
+    ($('prev') as HTMLButtonElement).disabled = i === 0;
+    ($('next') as HTMLButtonElement).disabled = i === N;
+    $('cur-title').innerHTML = n
+      ? `Paso ${i} <span class="of">de ${N}</span> ${state.done.includes(n.id) ? `<span class="ok">${icon('check', 14)} Hecho</span>` : ''}`
+      : `${icon('box')} Preparación`;
+    $('cur-sub').innerHTML = n ? `${n.stats.length}x31 · ${pairText(n)}` : `Reúne los ${nodes.filter((x) => !x.parents).length} Pokémon base`;
+    const slider = $('slider') as HTMLInputElement;
+    slider.max = String(N);
+    slider.value = String(i);
+    $('fill').style.width = `${(i / Math.max(1, N)) * 100}%`;
+    // marcas: una por paso (verde si está hecho) y el nivel donde empieza cada tramo
+    const at = (k: number) => `left:calc(14px + (100% - 28px) * ${k / Math.max(1, N)})`;
+    // etiqueta de cada nivel centrada en su tramo; el último (el objetivo) es el trofeo
+    const spans = new Map<number, number[]>();
+    steps.forEach((st, k) => spans.set(st.stats.length, [...(spans.get(st.stats.length) ?? []), k + 1]));
+    const marks = [...spans]
+      .map(([lvl, ks]) => `<span class="lvl-mark" style="${at((ks[0] + ks[ks.length - 1]) / 2)}">${lvl === plan.stats.length ? icon('trophy', 14) : `${lvl}<span class="x31">x31</span>`}</span>`)
+      .join('');
+    $('ticks').innerHTML =
+      marks + steps.map((st, k) => `<span class="tick ${state.done.includes(st.id) ? 'done' : ''}" style="${at(k + 1)}"></span>`).join('');
+    // menú con todos los pasos
+    $('menu-list').innerHTML =
+      `<li><button type="button" data-go="" data-text="0 preparacion base" class="${i === 0 ? 'on' : ''}"><span class="num">${icon('box')}</span><span>Preparación<small>Pokémon base</small></span></button></li>` +
+      steps
+        .map((st, k) => {
+          const done = state.done.includes(st.id);
+          const text = fold(`${k + 1} paso ${k + 1} ${st.stats.length}x31 ${st.parents!.map((p) => nameOf(p.species)).join(' ')}`);
+          return `<li><button type="button" data-go="${st.id}" data-text="${text}" class="${k + 1 === i ? 'on' : ''} ${done ? 'done' : ''}">
+            <span class="num">${done ? icon('check', 14) : k + 1}</span>
+            <span>${st.stats.length}x31 · ${pairText(st)}<small>→ ${nameOf(st.species)} ${GENDER_ICON[st.gender]} (${st.id})</small></span>
+          </button></li>`;
+        })
+        .join('');
+  }
+
+  function toggleMenu(open = $('menu').hidden) {
+    $('menu').hidden = !open;
+    $('cur').setAttribute('aria-expanded', String(open));
+    if (!open) return;
+    const q = $('menu-q') as HTMLInputElement;
+    q.value = '';
+    filterMenu();
+    q.focus();
+    $('menu-list').querySelector('.on')?.scrollIntoView({ block: 'center' });
+  }
+  function filterMenu() {
+    const q = fold(($('menu-q') as HTMLInputElement).value);
+    $('menu-list')
+      .querySelectorAll<HTMLElement>('button')
+      .forEach((b) => (b.parentElement!.hidden = !!q && !b.dataset.text!.includes(q)));
+  }
+
+  function renderDetail() {
+    const i = steps.findIndex((n) => n.id === selected);
+    if (i < 0) {
+      // preparación: los Pokémon de la base
+      $('detail').innerHTML = `
+        <h3>${icon('box')} Preparación</h3>
+        <p class="hint">Antes de criar reúne los Pokémon de la fila de arriba (1x31). Cada uno lleva su Recio al criar.</p>
+        <ul class="prep">${state.order
+          .map((s) => {
+            const need = invFit.need[s];
+            if (!need) return '';
+            const miss = invFit.missing[s];
+            const lack = miss ? miss.m + miss.f + miss.n : 0;
+            return `<li>${statChip(s)} ${[need.m && `${need.m}${gs.m}`, need.f && `${need.f}${gs.f}`, need.n && `${need.n}`].filter(Boolean).join(' + ')}
+              ${lack ? `<span class="bad">faltan ${lack}</span>` : `<span class="good">${icon('check')}</span>`}</li>`;
+          })
+          .join('')}</ul>
+        <div class="nav"><span></span><button type="button" data-go="${steps[0]?.id ?? ''}">Empezar: Paso 1 ${icon('right')}</button></div>`;
+      return;
+    }
+    const n = steps[i];
+    const [f, m] = n.parents!;
+    const done = state.done.includes(n.id);
+    const isGoal = n === plan;
+    const random = gplan.random.has(n.id);
+    const waits = gplan.waitsFor.get(n.id);
+    const stepOf = (id: string) => steps.findIndex((s) => s.id === id) + 1;
+    const genderNote = random
+      ? `<p class="note free">${icon('dice')} Deja el género <strong>al azar</strong> (gratis). Al recoger el huevo, anota qué salió: de eso depende el paso ${stepOf(waits ? waits : [...gplan.waitsFor].find(([, r]) => r === n.id)?.[0] ?? '')}.</p>`
+      : gplan.paid.has(n.id)
+        ? n.gender
+          ? `<p class="note">${icon('info')} En la Guardería elige <strong>${GENDER_WORD[n.gender]}</strong> (${data.genderPrice} ₽).</p>`
+          : `<p class="note">${icon('info')} Le elegirás el género <strong>contrario</strong> al que salga en el paso ${stepOf(waits!)} (${data.genderPrice} ₽). Haz primero ese paso.</p>`
+        : isGoal && bothGenders(n.species)
+          ? `<p class="note free">${icon('dice')} Género al azar (gratis).</p>`
+          : '';
+    const result = state.results[n.id];
+    const doneControl = random
+      ? `<div class="pick">
+          <span>${done ? 'Salió:' : '¿Qué salió?'}</span>
+          <button type="button" data-result="M" class="${result === 'M' ? 'on' : ''}">${gs.m} Macho</button>
+          <button type="button" data-result="F" class="${result === 'F' ? 'on' : ''}">${gs.f} Hembra</button>
+        </div>`
+      : `<label class="tick"><input type="checkbox" data-done="${n.id}" ${done ? 'checked' : ''} /> Hecho</label>`;
+    $('detail').innerHTML = `
+      <h3>Paso ${i + 1} de ${steps.length} · Cría un ${n.stats.length}x31 ${isGoal ? icon('trophy') : ''}</h3>
+      <div class="pair">
+        <div><span class="side m">${m.gender === 'N' ? 'Sin género' : `${gs.m} Macho`}</span>${monCard(m)}${itemTag(m.item!)}</div>
+        <span class="x">×</span>
+        <div><span class="side f">${f.species === 'ditto' ? 'Ditto' : `${gs.f} Hembra`}</span>${monCard(f)}${itemTag(f.item!)}</div>
+      </div>
+      <div class="arrow">${icon('down')} Resultado</div>
+      <div class="result">${monCard(n)}</div>
+      ${genderNote}
+      ${!isGoal ? `<p class="next">Después le pondrás <img src="${statInfo.get(n.item!)!.icon}" alt="" width="18" height="18" /> <strong>${statInfo.get(n.item!)!.item}</strong> para el paso ${steps.findIndex((s) => s.parents!.includes(n)) + 1}.</p>` : `<p class="next">${icon('party')} ¡Este es tu Pokémon final! Cambia su naturaleza con una Menta si hace falta.</p>`}
+      ${doneControl}
+      <div class="nav">
+        <button type="button" data-go="${steps[i - 1]?.id ?? ''}">${icon('left')} ${i ? 'Anterior' : 'Preparación'}</button>
+        ${steps[i + 1] ? `<button type="button" data-go="${steps[i + 1].id}">Siguiente ${icon('right')}</button>` : '<span></span>'}
+      </div>`;
+  }
+
+  /** Resalta en el lienzo el paso abierto (padres, líneas e hijo). */
+  function highlight() {
+    const n = steps.find((s) => s.id === selected);
+    const ids = n ? [n.id, ...n.parents!.map((p) => p.id)] : nodes.filter((x) => !x.parents).map((x) => x.id);
+    world.classList.toggle('focusing', true);
+    world.querySelectorAll<HTMLElement>('[data-node]').forEach((el) => el.classList.toggle('hl', ids.includes(el.dataset.node!)));
+    world.querySelectorAll<SVGElement>('path, .edge-item').forEach((el) => el.classList.toggle('hl', !!n && el.dataset.step === n.id));
+  }
+
+  function go(id: string) {
+    selected = id;
+    renderSteps();
+    renderDetail();
+    highlight();
+    const n = steps.find((s) => s.id === id);
+    focus(n ? [n.id, ...n.parents!.map((p) => p.id)] : nodes.filter((x) => !x.parents).map((x) => x.id));
+  }
+
+  function progress() {
+    const n = state.done.length;
+    ($('bar') as HTMLElement).style.width = `${(n / Math.max(1, steps.length)) * 100}%`;
+    $('progress-text').textContent = `${n} de ${steps.length} crianzas hechas${n === steps.length && n ? ' · ¡Listo!' : ''}`;
+  }
+
+  // mover y acercar el lienzo (mouse, dedo y pellizco)
+  const pointers = new Map<number, { x: number; y: number }>();
+  let moved = 0;
+  let pinch = 0;
+  viewport.addEventListener('pointerdown', (e) => {
+    if ((e.target as HTMLElement).closest('.zoom')) return;
+    pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    moved = 0;
+    pinch = 0;
+    cancelAnimationFrame(anim);
+  });
+  viewport.addEventListener('pointermove', (e) => {
+    const prev = pointers.get(e.pointerId);
+    if (!prev) return;
+    const cur = { x: e.clientX, y: e.clientY };
+    pointers.set(e.pointerId, cur);
+    if (pointers.size === 2) {
+      const [a, b] = [...pointers.values()];
+      const d = Math.hypot(a.x - b.x, a.y - b.y);
+      const r = viewport.getBoundingClientRect();
+      if (pinch) zoomAt(d / pinch, (a.x + b.x) / 2 - r.left, (a.y + b.y) / 2 - r.top);
+      pinch = d;
+      moved = 99;
+      return;
+    }
+    // se captura solo al arrastrar, para que un toque simple siga siendo clic sobre el Pokémon
+    if (moved > 6 && !viewport.hasPointerCapture(e.pointerId)) viewport.setPointerCapture(e.pointerId);
+    view.x += cur.x - prev.x;
+    view.y += cur.y - prev.y;
+    moved += Math.abs(cur.x - prev.x) + Math.abs(cur.y - prev.y);
+    draw();
+  });
+  const release = (e: PointerEvent) => {
+    pointers.delete(e.pointerId);
+    pinch = 0;
+  };
+  viewport.addEventListener('pointerup', release);
+  viewport.addEventListener('pointercancel', release);
+  viewport.addEventListener(
+    'wheel',
+    (e) => {
+      e.preventDefault();
+      const r = viewport.getBoundingClientRect();
+      zoomAt(Math.exp(-e.deltaY * 0.0015), e.clientX - r.left, e.clientY - r.top);
+    },
+    { passive: false },
+  );
+  // tocar un Pokémon del lienzo abre su paso (si fue un arrastre, no)
+  world.addEventListener('click', (e) => {
+    if (moved > 6) return;
+    const id = (e.target as HTMLElement).closest<HTMLElement>('[data-node]')?.dataset.node;
+    if (!id) return;
+    const step = steps.find((s) => s.id === id) ?? steps.find((s) => s.parents!.some((p) => p.id === id));
+    if (step) go(step.id);
+  });
+  const center = () => [viewport.clientWidth / 2, viewport.clientHeight / 2] as const;
+  $('zin').addEventListener('click', () => zoomAt(1.3, ...center(), true));
+  $('zout').addEventListener('click', () => zoomAt(1 / 1.3, ...center(), true));
+  $('zfit').addEventListener('click', () => focus(nodes.map((n) => n.id), true, 1));
+
+  // ---------- eventos del formulario ----------
+  $('stats').addEventListener('change', () => {
+    const picked = [...document.querySelectorAll<HTMLInputElement>('#stats input:checked')].map((i) => i.value as Stat);
+    if (!picked.length) return render(); // al menos un IV
+    if (state.done.length && !confirm('Cambiar los IVs rehace el plan y borra el progreso marcado. ¿Continuar?')) return render();
+    state.stats = STATS.filter((s) => picked.includes(s));
+    state.done = [];
+    render(true);
+  });
+  $('partner-hint').addEventListener('click', (e) => {
+    const b = (e.target as HTMLElement).closest<HTMLElement>('[data-egg]');
+    if (!b) return;
+    eggFilter = b.dataset.egg!;
+    render();
+  });
+  $('partners').addEventListener('click', (e) => {
+    if ((e.target as HTMLElement).id !== 'more') return;
+    showAll = !showAll;
+    render();
+  });
+  $('partners').addEventListener('change', (e) => {
+    const v = (e.target as HTMLInputElement).value;
+    if (state.done.length && !confirm('Cambiar la pareja borra el progreso marcado. ¿Continuar?')) return render();
+    state.partner = v;
+    state.done = [];
+    render();
+  });
+  // inventario: se recalcula al salir del campo para no reordenar mientras escribe
+  $('inv').addEventListener('change', (e) => {
+    const el = e.target as HTMLInputElement;
+    if (!el.dataset.inv) return;
+    const s = el.dataset.inv as Stat;
+    state.inv[s] = { m: 0, f: 0, ...state.inv[s], [el.dataset.g!]: count(el.value) };
+    if (!state.manual && state.done.length) state.manual = true; // con progreso, no se mueve la pirámide sola
+    render();
+  });
+  $('inv').addEventListener('click', (e) => {
+    const b = (e.target as HTMLElement).closest<HTMLButtonElement>('[data-move]');
+    if (!b) return;
+    if (state.done.length && !confirm('Cambiar el orden rehace la pirámide y borra el progreso marcado. ¿Continuar?')) return;
+    const s = b.dataset.move as Stat;
+    const i = state.order.indexOf(s);
+    const j = i + Number(b.dataset.dir);
+    [state.order[i], state.order[j]] = [state.order[j], state.order[i]];
+    state.manual = true;
+    state.done = [];
+    render();
+  });
+  $('auto').addEventListener('click', () => {
+    if (state.done.length && !confirm('Reordenar rehace la pirámide y borra el progreso marcado. ¿Continuar?')) return;
+    state.manual = false;
+    state.done = [];
+    render();
+  });
+  $('genders').addEventListener('change', (e) => {
+    state.final = (e.target as HTMLInputElement).value as Gender;
+    render();
+  });
+  document.querySelectorAll<HTMLButtonElement>('[data-view]').forEach((b) =>
+    b.addEventListener('click', () => {
+      if (state.view === b.dataset.view) return;
+      state.view = b.dataset.view as View;
+      save();
+      renderBoard(false);
+      // se queda en el paso abierto (o en la preparación), con animación
+      const n = steps.find((s) => s.id === selected);
+      requestAnimationFrame(() => focus(n ? [n.id, ...n.parents!.map((p) => p.id)] : nodes.filter((x) => !x.parents).map((x) => x.id)));
+    }),
+  );
+  $('prev').addEventListener('click', () => go(idAt(stepIndex() - 1)));
+  $('next').addEventListener('click', () => go(idAt(stepIndex() + 1)));
+  $('slider').addEventListener('input', (e) => go(idAt(Number((e.target as HTMLInputElement).value))));
+  $('cur').addEventListener('click', () => toggleMenu());
+  $('menu-q').addEventListener('input', filterMenu);
+  $('menu-q').addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') toggleMenu(false);
+    if (e.key !== 'Enter') return;
+    const first = $('menu-list').querySelector<HTMLElement>('li:not([hidden]) button');
+    if (first) {
+      toggleMenu(false);
+      go(first.dataset.go!);
+    }
+  });
+  $('menu-list').addEventListener('click', (e) => {
+    const b = (e.target as HTMLElement).closest<HTMLElement>('[data-go]');
+    if (!b) return;
+    toggleMenu(false);
+    go(b.dataset.go!);
+  });
+  document.addEventListener('click', (e) => {
+    if (!$('menu').hidden && !(e.target as HTMLElement).closest('.cur')) toggleMenu(false);
+  });
+  // flechas del teclado para avanzar/retroceder (fuera de los campos de texto)
+  $('plan').addEventListener('keydown', (e) => {
+    const t = e.target as HTMLElement;
+    if (t.matches('input:not([type=checkbox]), textarea') || !$('menu').hidden) return;
+    if (e.key === 'ArrowLeft') go(idAt(stepIndex() - 1));
+    if (e.key === 'ArrowRight') go(idAt(stepIndex() + 1));
+  });
+  $('detail').addEventListener('click', (e) => {
+    const b = (e.target as HTMLElement).closest<HTMLElement>('button[data-go]');
+    if (b) go(b.dataset.go!);
+  });
+  $('detail').addEventListener('click', (e) => {
+    const b = (e.target as HTMLElement).closest<HTMLElement>('[data-result]');
+    if (!b) return;
+    const id = selected;
+    const g = b.dataset.result as 'M' | 'F';
+    if (state.results[id] === g) {
+      delete state.results[id];
+      state.done = state.done.filter((x) => x !== id);
+    } else {
+      state.results[id] = g;
+      state.done = [...new Set([...state.done, id])];
+    }
+    render();
+    const i = steps.findIndex((s) => s.id === id);
+    if (state.done.includes(id) && steps[i + 1]) setTimeout(() => go(steps[i + 1].id), 350);
+  });
+  $('strategy').addEventListener('change', (e) => {
+    state.strategy = (e.target as HTMLInputElement).value as Strategy;
+    render();
+  });
+  $('detail').addEventListener('change', (e) => {
+    const box = e.target as HTMLInputElement;
+    const id = box.dataset.done;
+    if (!id) return;
+    state.done = box.checked ? [...new Set([...state.done, id])] : state.done.filter((d) => d !== id);
+    world.querySelector(`[data-node="${id}"]`)?.classList.toggle('done', box.checked);
+    world.querySelectorAll(`path[data-step="${id}"]`).forEach((p) => p.classList.toggle('done', box.checked));
+    renderSteps();
+    progress();
+    save();
+    // al marcar, pasa solo al siguiente paso
+    const i = steps.findIndex((s) => s.id === id);
+    if (box.checked && steps[i + 1]) setTimeout(() => go(steps[i + 1].id), 350);
+  });
+  $('export').addEventListener('click', () => {
+    const blob = new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' });
+    const a = Object.assign(document.createElement('a'), { href: URL.createObjectURL(blob), download: `crianza-${state.target}.json` });
+    a.click();
+    URL.revokeObjectURL(a.href);
+  });
+  $('import').addEventListener('change', async (e) => {
+    const file = (e.target as HTMLInputElement).files?.[0];
+    if (!file) return;
+    try {
+      const loaded = sanitize(JSON.parse(await file.text()));
+      if (!loaded) throw new Error();
+      state = loaded;
+      selected = '';
+      render(true);
+    } catch {
+      alert('Ese archivo no es una crianza válida.');
+    }
+    (e.target as HTMLInputElement).value = '';
+  });
+  $('reset').addEventListener('click', () => {
+    if (!confirm('¿Borrar el plan y el progreso?')) return;
+    state = blank();
+    save();
+    render();
+  });
+
+  render(true);
+</script>
+
+<style>
+  .intro {
+    color: var(--muted);
+    margin-top: 0;
+  }
+  .howto,
+  .panel {
+    margin-bottom: 14px;
+    padding: 14px 16px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+  }
+  .howto {
+    background: linear-gradient(135deg, color-mix(in srgb, #e86fd0 18%, var(--surface)), var(--surface) 60%);
+  }
+  .howto summary {
+    cursor: pointer;
+    font: 600 1.05rem var(--font-title);
+  }
+  .howto ol {
+    margin: 10px 0 0;
+    padding-left: 20px;
+    display: grid;
+    gap: 8px;
+    line-height: 1.7;
+  }
+  h2 {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 0 0 10px;
+    font-size: 1.1rem;
+  }
+  .n {
+    display: inline-grid;
+    place-items: center;
+    flex: none;
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    background: var(--accent);
+    color: #fff;
+    font-size: 0.9rem;
+  }
+  .hint {
+    margin: 6px 0;
+    color: var(--muted);
+    font-size: 0.9rem;
+  }
+  input[type='search'] {
+    width: 100%;
+    padding: 10px 12px;
+    font: inherit;
+    font-size: 1.05rem;
+    color: inherit;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+  }
+  button {
+    font: inherit;
+    color: inherit;
+  }
+  .results {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+    gap: 6px;
+    margin-top: 8px;
+  }
+  .results :global(button) {
+    display: grid;
+    justify-items: center;
+    padding: 6px;
+    font-size: 0.8rem;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    cursor: pointer;
+  }
+  .results :global(button:hover) {
+    border-color: var(--accent);
+  }
+  #target :global(.picked) {
+    display: flex;
+    gap: 14px;
+    align-items: center;
+    margin-top: 10px;
+  }
+  #target :global(.picked img) {
+    flex: none;
+    width: 110px;
+    height: 110px;
+  }
+  #target :global(.big) {
+    font: 700 1.4rem var(--font-title);
+  }
+  .panel :global(a) {
+    color: inherit;
+  }
+  :global(.row) {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px;
+    margin-top: 4px;
+  }
+  :global(.small) {
+    font-size: 0.85rem;
+    color: var(--muted);
+  }
+  :global(.pill) {
+    padding: 2px 10px;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--c) 30%, transparent);
+    border: 1px solid var(--c);
+    font-size: 0.78rem;
+    white-space: nowrap;
+  }
+  :global(.warn) {
+    margin-top: 8px;
+    color: #ffb74d;
+    font-size: 0.9rem;
+  }
+  :global(.bad) {
+    color: #ff8a80;
+    font-weight: 700;
+  }
+  :global(.good) {
+    color: #69f0ae;
+  }
+  .stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    gap: 8px;
+  }
+  .stats :global(.stat) {
+    position: relative;
+    cursor: pointer;
+  }
+  .stats :global(.stat input) {
+    position: absolute;
+    opacity: 0;
+  }
+  .stats :global(.stat span) {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    column-gap: 8px;
+    align-items: center;
+    padding: 8px 10px;
+    border-radius: 10px;
+    border: 2px solid var(--border);
+    background: var(--bg);
+    opacity: 0.55;
+  }
+  .stats :global(.stat img) {
+    grid-row: span 2;
+    image-rendering: pixelated;
+  }
+  .stats :global(.stat small) {
+    color: var(--muted);
+    font-size: 0.75rem;
+  }
+  .stats :global(.stat input:checked + span) {
+    opacity: 1;
+    border-color: var(--c);
+    background: color-mix(in srgb, var(--c) 18%, var(--bg));
+  }
+  .stats :global(.stat input:focus-visible + span) {
+    outline: 2px solid var(--text);
+  }
+  .partners {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 260px), 1fr));
+    gap: 8px;
+  }
+  .partners :global(.partner) {
+    position: relative;
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    padding: 8px;
+    border: 2px solid var(--border);
+    border-radius: 12px;
+    background: var(--bg);
+    cursor: pointer;
+  }
+  .partners :global(.partner input) {
+    position: absolute;
+    opacity: 0;
+  }
+  .partners :global(.partner.on) {
+    border-color: var(--accent);
+    background: color-mix(in srgb, var(--accent) 12%, var(--bg));
+  }
+  .partners :global(.partner > span) {
+    display: grid;
+    gap: 2px;
+  }
+  #partner-hint {
+    display: grid;
+    gap: 8px;
+  }
+  #partner-hint :global(.eggs) {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  #partner-hint :global(.eggs button) {
+    padding: 6px 14px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    background: var(--bg);
+    border: 0;
+    border-radius: 999px;
+    cursor: pointer;
+  }
+  #partner-hint :global(.eggs button.on) {
+    background: #6d5bd0;
+    color: #fff;
+    box-shadow: var(--neu-in);
+  }
+  .partners :global(.more) {
+    grid-column: 1 / -1;
+    padding: 10px;
+    font-weight: 700;
+    background: var(--bg);
+    border: 1px dashed var(--border);
+    border-radius: 12px;
+    cursor: pointer;
+  }
+  .partners :global(.more:hover) {
+    border-color: var(--accent);
+  }
+  .partners :global(.best) {
+    font-size: 0.75rem;
+    color: #ffd54f;
+  }
+
+  /* inventario */
+  .inv {
+    display: grid;
+    gap: 6px;
+  }
+  .inv :global(.inv-row) {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    grid-template-areas: 'move stat stat' 'move need miss' 'move have have';
+    gap: 4px 10px;
+    align-items: center;
+    padding: 8px 10px;
+    border-left: 4px solid var(--c);
+    border-radius: 10px;
+    background: var(--bg);
+  }
+  @media (min-width: 760px) {
+    .inv :global(.inv-row) {
+      grid-template-columns: auto 190px 1fr auto 120px;
+      grid-template-areas: 'move stat need have miss';
+    }
+  }
+  .inv :global(.move) {
+    grid-area: move;
+    display: grid;
+    gap: 2px;
+  }
+  .inv :global(.move button) {
+    width: 28px;
+    height: 22px;
+    font-size: 0.7rem;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    cursor: pointer;
+  }
+  .inv :global(.move button:disabled) {
+    opacity: 0.3;
+    cursor: default;
+  }
+  .inv :global(.inv-stat) {
+    grid-area: stat;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .inv :global(.inv-stat img) {
+    image-rendering: pixelated;
+  }
+  .inv :global(.x16) {
+    padding: 1px 8px;
+    border-radius: 999px;
+    background: var(--c);
+    color: var(--ink);
+    font-weight: 700;
+    font-size: 0.8rem;
+  }
+  .inv :global(.inv-need) {
+    grid-area: need;
+    font-size: 0.85rem;
+    color: var(--muted);
+  }
+  .inv :global(.inv-have) {
+    grid-area: have;
+    display: flex;
+    gap: 8px;
+  }
+  .inv :global(.inv-have input) {
+    width: 56px;
+    padding: 4px 6px;
+    font: inherit;
+    color: inherit;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+  }
+  .inv :global(.inv-miss) {
+    grid-area: miss;
+    justify-self: end;
+    font-size: 0.85rem;
+    font-weight: 700;
+    color: #ff8a80;
+  }
+  .inv :global(.inv-miss.ok) {
+    color: #69f0ae;
+  }
+  .auto {
+    margin: 4px 0 10px;
+    padding: 8px 14px;
+    font-size: 0.9rem;
+    font-weight: 700;
+    background: var(--accent);
+    border: 0;
+    border-radius: 10px;
+    color: #fff;
+    cursor: pointer;
+  }
+  .auto:disabled {
+    background: var(--bg);
+    color: #69f0ae;
+    border: 1px solid #4cc46b;
+    cursor: default;
+  }
+  .inv :global(.gin) {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-weight: 700;
+  }
+  :global(.gs) {
+    display: inline-grid;
+    place-items: center;
+    width: 20px;
+    height: 20px;
+    margin-left: 2px;
+    border-radius: 50%;
+    color: #fff;
+    font: 700 0.85rem system-ui, sans-serif;
+    vertical-align: middle;
+  }
+  :global(.gs.m) {
+    background: #1e88e5;
+  }
+  :global(.gs.f) {
+    background: #d81b60;
+  }
+  .inv :global(.gin .gs) {
+    width: 26px;
+    height: 26px;
+  }
+  .inv :global(.gin .gs svg) {
+    width: 17px;
+    height: 17px;
+  }
+  .inv :global(.gin span) {
+    font-size: 1.2rem;
+    font-family: system-ui, sans-serif;
+  }
+  .inv :global(.gin.m span) {
+    color: #42a5f5;
+  }
+  .inv :global(.gin.f span) {
+    color: #f06292;
+  }
+  .inv :global(.gin.any span) {
+    font-size: 0.85rem;
+  }
+  .inv :global(.gin.m input) {
+    border-color: #42a5f5 !important;
+    background: color-mix(in srgb, #42a5f5 14%, var(--surface)) !important;
+  }
+  .inv :global(.gin.f input) {
+    border-color: #f06292 !important;
+    background: color-mix(in srgb, #f06292 14%, var(--surface)) !important;
+  }
+  .inv :global(.gin input:disabled) {
+    pointer-events: none; /* para que la burbuja salga al pasar por encima */
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+  /* burbuja con el motivo */
+  .inv :global(.gin[data-tip]:hover::after),
+  .inv :global(.gin[data-tip]:focus-within::after) {
+    content: attr(data-tip);
+    position: absolute;
+    z-index: 20;
+    right: 0;
+    bottom: calc(100% + 8px);
+    width: max-content;
+    max-width: 220px;
+    padding: 8px 10px;
+    border-radius: 10px;
+    background: #2b2f3a;
+    border: 1px solid var(--border);
+    box-shadow: 0 6px 20px rgb(0 0 0 / 0.45);
+    font-size: 0.78rem;
+    font-weight: 400;
+    line-height: 1.4;
+    color: var(--text);
+    white-space: normal;
+  }
+  .inv :global(.gin[data-tip]:hover::before),
+  .inv :global(.gin[data-tip]:focus-within::before) {
+    content: '';
+    position: absolute;
+    right: 18px;
+    bottom: calc(100% + 2px);
+    border: 6px solid transparent;
+    border-top-color: #2b2f3a;
+  }
+  :global(.link) {
+    background: none;
+    border: 0;
+    padding: 0;
+    color: #8ab4ff;
+    text-decoration: underline;
+    cursor: pointer;
+  }
+
+  .opts {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-bottom: 10px;
+  }
+  .opts :global(.opt) {
+    position: relative;
+  }
+  .opts :global(.opt input) {
+    position: absolute;
+    opacity: 0;
+  }
+  .opts :global(.opt span) {
+    display: inline-block;
+    padding: 6px 14px;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    background: var(--bg);
+    cursor: pointer;
+  }
+  .opts :global(.opt input:checked + span) {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #fff;
+  }
+  .opts :global(.opt input:focus-visible + span) {
+    outline: 2px solid var(--text);
+  }
+  .check {
+    display: flex;
+    gap: 8px;
+    align-items: flex-start;
+    font-size: 0.9rem;
+  }
+
+  /* resumen */
+  #summary :global(.sum) {
+    display: grid;
+    gap: 10px;
+  }
+  /* PC: datos y Recios a la izquierda (cada uno en su fila), total a la derecha */
+  @media (min-width: 900px) {
+    #summary :global(.sum) {
+      grid-template-columns: 1fr 280px;
+      align-items: stretch;
+    }
+    #summary :global(.total) {
+      grid-column: 2;
+      grid-row: 1 / span 2;
+    }
+  }
+  #summary :global(.kpis) {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 6px;
+  }
+  #summary :global(.kpi),
+  #summary :global(.items),
+  #summary :global(.total) {
+    display: grid;
+    gap: 2px;
+    align-content: center;
+    padding: 10px;
+    border-radius: 10px;
+    background: var(--bg);
+  }
+  #summary :global(.kpi) {
+    justify-items: center;
+    text-align: center;
+  }
+  #summary :global(.k) {
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--muted);
+  }
+  #summary :global(strong) {
+    font: 700 1.6rem var(--font-title);
+    line-height: 1.1;
+  }
+  #summary :global(small) {
+    font-size: 0.78rem;
+    color: var(--muted);
+  }
+  #summary :global(.tiles) {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 6px;
+    margin-top: 6px;
+  }
+  @media (min-width: 560px) {
+    #summary :global(.tiles) {
+      grid-template-columns: repeat(6, minmax(0, 1fr));
+    }
+  }
+  #summary :global(.tile) {
+    min-width: 0;
+    display: grid;
+    justify-items: center;
+    gap: 1px;
+    padding: 6px 4px;
+    border-radius: 10px;
+    border: 1px solid var(--c);
+    background: color-mix(in srgb, var(--c) 14%, var(--surface));
+    text-align: center;
+  }
+  #summary :global(.tile img) {
+    image-rendering: pixelated;
+  }
+  #summary :global(.tile b) {
+    font: 700 1.1rem var(--font-title);
+  }
+  #summary :global(.tile small) {
+    font-size: 0.68rem;
+    line-height: 1.2;
+  }
+  #summary :global(.total) {
+    background: color-mix(in srgb, #4cc46b 16%, var(--bg));
+    border: 1px solid #4cc46b;
+  }
+  #summary :global(.total strong) {
+    font-size: 1.9rem;
+    color: #8ff0a4;
+  }
+  :global(.mini) {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    font-size: 0.85rem;
+  }
+  :global(.mini img) {
+    image-rendering: pixelated;
+  }
+
+  /* pasos */
+  .views {
+    display: inline-flex;
+    margin-bottom: 8px;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    overflow: hidden;
+  }
+  .views button {
+    padding: 6px 14px;
+    font-size: 0.85rem;
+    background: var(--bg);
+    border: 0;
+    cursor: pointer;
+  }
+  .views button.on {
+    background: var(--accent);
+    color: #fff;
+  }
+  /* selector de pasos */
+  .stepper {
+    position: relative; /* el menú usa todo el ancho del selector */
+    display: grid;
+    grid-template-columns: 56px minmax(0, 1fr) 56px;
+    gap: 8px;
+    align-items: stretch;
+  }
+  .nav-btn {
+    font: 700 2rem/1 var(--font-title);
+    background: var(--accent);
+    color: #fff;
+    border: 0;
+    border-radius: 14px;
+    cursor: pointer;
+  }
+  .nav-btn:active {
+    transform: scale(0.94);
+  }
+  .nav-btn:disabled {
+    background: var(--bg);
+    color: var(--muted);
+    cursor: default;
+  }
+
+  .cur-btn {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 8px 14px;
+    background: var(--bg);
+    border: 2px solid var(--border);
+    border-radius: 14px;
+    cursor: pointer;
+    text-align: left;
+  }
+  .cur-btn:hover,
+  .cur-btn[aria-expanded='true'] {
+    border-color: var(--accent);
+  }
+  .cur-text {
+    display: grid;
+    min-width: 0;
+  }
+  .cur-text strong {
+    font: 700 1.15rem var(--font-title);
+  }
+  .cur-text :global(.of) {
+    font-weight: 400;
+    color: var(--muted);
+    font-size: 0.9rem;
+  }
+  .cur-text :global(.ok) {
+    margin-left: 6px;
+    font-size: 0.8rem;
+    color: #69f0ae;
+  }
+  .cur-text small {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 3px;
+    font-size: 0.82rem;
+    color: var(--muted);
+  }
+  .caret {
+    flex: none;
+    font-size: 1.1rem;
+    color: var(--muted);
+  }
+  .menu {
+    position: absolute;
+    z-index: 25;
+    left: 0;
+    right: 0;
+    top: calc(100% + 6px);
+    padding: 8px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    box-shadow: 0 12px 30px rgb(0 0 0 / 0.5);
+  }
+  .menu input {
+    width: 100%;
+    padding: 8px 10px;
+    font: inherit;
+    color: inherit;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+  }
+  .menu ul {
+    max-height: 320px;
+    overflow-y: auto;
+    margin: 6px 0 0;
+    padding: 0;
+    list-style: none;
+  }
+  .menu :global(li[hidden]) {
+    display: none;
+  }
+  .menu :global(li button) {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 6px 8px;
+    background: none;
+    border: 0;
+    border-radius: 8px;
+    text-align: left;
+    font-size: 0.88rem;
+    cursor: pointer;
+  }
+  .menu :global(li button:hover),
+  .menu :global(li button.on) {
+    background: color-mix(in srgb, var(--accent) 22%, transparent);
+  }
+  .menu :global(li button > span:last-child) {
+    display: block;
+  }
+  .menu :global(li small) {
+    display: block;
+    color: var(--muted);
+    font-size: 0.75rem;
+  }
+  .menu :global(.num) {
+    flex: none;
+    display: grid;
+    place-items: center;
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    background: var(--bg);
+    font-weight: 700;
+    font-size: 0.8rem;
+  }
+  .menu :global(button.done .num) {
+    background: #2e7d32;
+    color: #fff;
+  }
+  .timeline {
+    position: relative;
+    height: 52px;
+    margin: 6px 0 4px;
+  }
+  .rail {
+    position: absolute;
+    left: 14px;
+    right: 14px;
+    top: 13px;
+    height: 8px;
+    border-radius: 4px;
+    background: var(--bg);
+    overflow: hidden;
+  }
+  .fill {
+    display: block;
+    height: 100%;
+    background: linear-gradient(90deg, #e86fd0, var(--accent));
+  }
+  .timeline :global(.tick) {
+    position: absolute;
+    top: 11px;
+    width: 3px;
+    height: 12px;
+    border-radius: 2px;
+    background: var(--border);
+    transform: translateX(-50%);
+    pointer-events: none;
+  }
+  .timeline :global(.tick.done) {
+    top: 9px;
+    height: 16px;
+    background: #4cc46b;
+  }
+  .timeline :global(.lvl-mark) {
+    position: absolute;
+    top: 30px;
+    transform: translateX(-50%);
+    font-size: 0.7rem;
+    font-weight: 700;
+    color: var(--muted);
+    white-space: nowrap;
+    pointer-events: none;
+  }
+  @media (max-width: 600px) {
+    .timeline :global(.x31) {
+      display: none;
+    }
+  }
+  .timeline input {
+    position: absolute;
+    inset: 0 0 auto 0;
+    width: 100%;
+    height: 34px;
+    margin: 0;
+    background: transparent;
+    appearance: none;
+    -webkit-appearance: none;
+    cursor: pointer;
+  }
+  .timeline input::-webkit-slider-runnable-track {
+    height: 34px;
+    background: transparent;
+  }
+  .timeline input::-moz-range-track {
+    background: transparent;
+  }
+  .timeline input::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 28px;
+    height: 28px;
+    margin-top: 3px;
+    border-radius: 50%;
+    background: var(--accent);
+    border: 3px solid #fff;
+    box-shadow: 0 2px 8px rgb(0 0 0 / 0.5);
+  }
+  .timeline input::-moz-range-thumb {
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    background: var(--accent);
+    border: 3px solid #fff;
+  }
+  .timeline input:focus-visible::-webkit-slider-thumb {
+    outline: 3px solid var(--text);
+  }
+
+  /* lienzo */
+  .board {
+    display: grid;
+    gap: 10px;
+  }
+  @media (min-width: 900px) {
+    .board {
+      grid-template-columns: 1fr 330px;
+    }
+  }
+  .viewport {
+    position: relative;
+    height: min(62vh, 560px);
+    overflow: hidden;
+    border-radius: 12px;
+    border: 1px solid var(--border);
+    background:
+      radial-gradient(circle, color-mix(in srgb, var(--muted) 25%, transparent) 1px, transparent 1px) 0 0 / 22px 22px,
+      var(--bg);
+    touch-action: none;
+    cursor: grab;
+    user-select: none;
+  }
+  .viewport:active {
+    cursor: grabbing;
+  }
+  .world {
+    position: absolute;
+    left: 0;
+    top: 0;
+    transform-origin: 0 0;
+  }
+  .world :global(.edges) {
+    position: absolute;
+    overflow: visible;
+    pointer-events: none;
+  }
+  .world :global(path) {
+    fill: none;
+    stroke: color-mix(in srgb, var(--c) 45%, transparent);
+    stroke-width: 3;
+    transition: stroke 0.2s, opacity 0.2s;
+  }
+  .world :global(path.done) {
+    stroke: #4cc46b;
+  }
+  .world:global(.focusing) :global(path:not(.hl)) {
+    opacity: 0.35;
+  }
+  .world :global(path.hl) {
+    stroke: var(--c);
+    stroke-width: 6;
+  }
+  .world :global(.edge-item) {
+    position: absolute;
+    image-rendering: pixelated;
+    pointer-events: none;
+    opacity: 0.7;
+  }
+  .world :global(.edge-item.hl) {
+    opacity: 1;
+    transform: scale(1.4);
+  }
+  .world :global(.lvl) {
+    position: absolute;
+    left: -110px;
+    padding: 2px 10px;
+    border-radius: 999px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    font-size: 0.8rem;
+    font-weight: 700;
+  }
+  .world :global(.node) {
+    position: absolute;
+    width: 160px;
+    min-height: 140px;
+    padding: 8px 4px;
+    background: var(--surface);
+    border: 2px solid var(--border);
+    border-radius: 14px;
+    cursor: pointer;
+    transition: border-color 0.2s, opacity 0.2s, box-shadow 0.2s;
+  }
+  .world:global(.focusing) :global(.node:not(.hl)) {
+    opacity: 0.5;
+  }
+  .world :global(.node.hl) {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 35%, transparent);
+    opacity: 1;
+  }
+  .world :global(.node .dots i) {
+    font-size: 0.66rem;
+    padding: 1px 3px;
+  }
+  .world :global(.node .who) {
+    font-size: 0.9rem;
+  }
+  .world :global(.node.g-F) {
+    border-top: 5px solid #f06292;
+  }
+  .world :global(.node.g-M) {
+    border-top: 5px solid #42a5f5;
+  }
+  .world :global(.node.done) {
+    border-color: #4cc46b;
+    background: color-mix(in srgb, #4cc46b 15%, var(--surface));
+  }
+  .world :global(.node.goal) {
+    border-color: #ffd54f;
+  }
+  .world :global(.badge) {
+    position: absolute;
+    top: -12px;
+    left: 50%;
+    transform: translateX(-50%);
+    padding: 1px 8px;
+    border-radius: 999px;
+    background: var(--accent);
+    color: #fff;
+    font-size: 0.68rem;
+    font-weight: 700;
+    white-space: nowrap;
+  }
+  .world :global(.node.done .badge) {
+    background: #4cc46b;
+  }
+  .zoom {
+    position: absolute;
+    right: 8px;
+    bottom: 8px;
+    display: grid;
+    gap: 4px;
+  }
+  .zoom button {
+    width: 36px;
+    height: 36px;
+    font-size: 1.1rem;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    cursor: pointer;
+  }
+
+  /* detalle del paso */
+  .detail {
+    padding: 12px;
+    border-radius: 12px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+  }
+  .detail :global(h3) {
+    margin: 0 0 8px;
+    font-size: 1rem;
+  }
+  .detail :global(.prep) {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    display: grid;
+    gap: 6px;
+  }
+  .detail :global(.prep li) {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+  }
+  :global(.mon) {
+    display: grid;
+    justify-items: center;
+    gap: 2px;
+    text-align: center;
+  }
+  :global(.mon img) {
+    pointer-events: none;
+  }
+  :global(.sid) {
+    font-size: 0.72rem;
+    font-weight: 700;
+    color: var(--muted);
+  }
+  :global(.who) {
+    font-size: 0.85rem;
+  }
+  :global(.g) {
+    font-size: 1.15rem;
+    font-family: system-ui, sans-serif;
+  }
+  :global(.g.m) {
+    color: #42a5f5;
+  }
+  :global(.g.f) {
+    color: #f06292;
+  }
+  :global(.g.n) {
+    color: var(--muted);
+  }
+  :global(.dots) {
+    display: flex;
+    gap: 2px;
+  }
+  :global(.dots i) {
+    font-style: normal;
+    font-size: 0.55rem;
+    font-weight: 700;
+    padding: 1px 2px;
+    border-radius: 4px;
+    color: var(--muted);
+    background: var(--bg);
+  }
+  :global(.dots i.on) {
+    color: var(--ink);
+    background: var(--c);
+  }
+  .detail :global(.pair) {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+  }
+  .detail :global(.pair > div) {
+    display: grid;
+    justify-items: center;
+    gap: 4px;
+  }
+  .detail :global(.side) {
+    padding: 1px 10px;
+    border-radius: 999px;
+    font-size: 0.75rem;
+    font-weight: 700;
+  }
+  .detail :global(.side.f) {
+    background: color-mix(in srgb, #f06292 25%, transparent);
+    color: #f8a5c2;
+  }
+  .detail :global(.side.m) {
+    background: color-mix(in srgb, #42a5f5 25%, transparent);
+    color: #90caf9;
+  }
+  .detail :global(.x) {
+    font: 700 1.3rem var(--font-title);
+    color: var(--accent);
+  }
+  .detail :global(.held),
+  .detail :global(.next) {
+    display: inline-flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px;
+    font-size: 0.78rem;
+    color: var(--muted);
+  }
+  .detail :global(.held img),
+  .detail :global(.next img) {
+    image-rendering: pixelated;
+  }
+  .detail :global(.arrow) {
+    margin: 6px 0;
+    text-align: center;
+    font-size: 0.8rem;
+    font-weight: 700;
+    color: #4cc46b;
+  }
+  .detail :global(.result) {
+    display: grid;
+    justify-items: center;
+  }
+  .detail :global(.note) {
+    margin: 8px 0 0;
+    font-size: 0.85rem;
+    color: #ffd54f;
+  }
+  .detail :global(.tick) {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    margin-top: 10px;
+    padding: 10px;
+    border-radius: 10px;
+    background: var(--surface);
+    font-weight: 700;
+    cursor: pointer;
+  }
+  .detail :global(.tick input) {
+    width: 22px;
+    height: 22px;
+    accent-color: #4cc46b;
+  }
+  .detail :global(.nav) {
+    display: flex;
+    justify-content: space-between;
+    gap: 8px;
+    margin-top: 10px;
+  }
+  .detail :global(.nav button) {
+    padding: 8px 12px;
+    font-size: 0.85rem;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    cursor: pointer;
+  }
+
+  .progress {
+    height: 10px;
+    margin-top: 14px;
+    border-radius: 5px;
+    background: var(--bg);
+    overflow: hidden;
+  }
+  .progress span {
+    display: block;
+    width: 0;
+    height: 100%;
+    background: linear-gradient(90deg, #e86fd0, #4cc46b);
+    transition: width 0.3s;
+  }
+  .actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 10px;
+  }
+  .actions button,
+  .actions .btn {
+    padding: 8px 14px;
+    font-size: 0.9rem;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    cursor: pointer;
+  }
+  .actions .ghost {
+    color: var(--muted);
+  }
+
+  /* estrategia de género y resultado de los huevos al azar */
+  .sub {
+    margin: 14px 0 8px;
+    font-size: 0.95rem;
+  }
+  .strat :global(.opt span) {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+  :global(.gs.x) {
+    background: #5c6273;
+    font-size: 0.8rem;
+  }
+  :global(.gs.n) {
+    background: #3a3f4d;
+  }
+  #inv-note {
+    display: grid;
+    gap: 6px;
+  }
+  #inv-note :global(span) {
+    display: flex;
+    gap: 6px;
+    align-items: flex-start;
+  }
+  .detail :global(.note.free) {
+    color: #8ff0a4;
+  }
+  /* pregunta arriba y los dos botones en columnas fijas: no se mueve al elegir */
+  .detail :global(.pick) {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    margin-top: 10px;
+    padding: 10px;
+    border-radius: 12px;
+    background: var(--surface);
+    box-shadow: var(--neu-in);
+    font-weight: 700;
+  }
+  .detail :global(.pick > span) {
+    grid-column: 1 / -1;
+  }
+  .detail :global(.pick button) {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 6px 12px;
+    font-size: 0.9rem;
+    font-weight: 700;
+    background: var(--bg);
+    border: 0;
+    border-radius: 10px;
+    cursor: pointer;
+  }
+  .detail :global(.pick button.on) {
+    background: #2e7d32;
+    color: #fff;
+    box-shadow: var(--neu-in);
+  }
+  .nav-btn,
+  .views button,
+  .actions button,
+  .actions .btn,
+  .detail :global(.nav button),
+  .partners :global(.more),
+  .auto {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+  }
+  .caret {
+    display: grid;
+  }
+</style>

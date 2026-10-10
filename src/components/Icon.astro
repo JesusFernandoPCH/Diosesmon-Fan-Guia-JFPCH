@@ -1,0 +1,11 @@
+---
+// Icono SVG del set de src/lib/icons.ts. Uso: <Icon name="check" /> o <Icon name="rain" size={16} />
+import { icon, type IconName } from '../lib/icons';
+interface Props {
+  name: IconName;
+  size?: number;
+}
+const { name, size } = Astro.props;
+---
+
+<Fragment set:html={icon(name, size)} />

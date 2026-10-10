@@ -1,0 +1,63 @@
+---
+// Lista de biomas con imagen. Si son muchos, muestra el nombre del grupo y los biomas en un desplegable.
+import BiomeChip from './BiomeChip.astro';
+import { zoneLabel } from '../data/labels';
+
+interface Props {
+  biomes: number[];
+  zones?: string[];
+  max?: number;
+}
+const { biomes, zones = [], max = 10 } = Astro.props;
+---
+
+{
+  biomes.length <= max ? (
+    <span class="list">
+      {biomes.map((i) => (
+        <BiomeChip i={i} />
+      ))}
+    </span>
+  ) : (
+    <span class="list">
+      {zones.map((z) => (
+        <span class="zone">{zoneLabel(z)}</span>
+      ))}
+      <details>
+        <summary>Ver los {biomes.length} biomas</summary>
+        <span class="list">
+          {biomes.map((i) => (
+            <BiomeChip i={i} />
+          ))}
+        </span>
+      </details>
+    </span>
+  )
+}
+
+<style>
+  .list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    align-items: center;
+  }
+  .zone {
+    padding: 2px 10px;
+    border-radius: 8px;
+    background: var(--surface-2);
+    font-size: 0.85rem;
+  }
+  details {
+    width: 100%;
+    font-size: 0.8rem;
+    color: var(--muted);
+  }
+  summary {
+    cursor: pointer;
+  }
+  details .list {
+    margin-top: 6px;
+    color: var(--text);
+  }
+</style>

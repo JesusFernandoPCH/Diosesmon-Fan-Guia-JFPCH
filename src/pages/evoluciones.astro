@@ -1,0 +1,162 @@
+---
+import Base from '../layouts/Base.astro';
+import EvoTree from '../components/EvoTree.astro';
+import { METHOD_TAGS, bySlug, childrenOf, families, familyMembers, methodTags } from '../lib/evo';
+
+const fold = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+const cards = families.map((root) => {
+  const members = familyMembers(root);
+  const tags = new Set(members.flatMap((m) => childrenOf(m).flatMap((c) => c.ways.flatMap(methodTags))));
+  return {
+    root,
+    names: fold(members.map((m) => `${bySlug.get(m)!.es} ${bySlug.get(m)!.en} ${bySlug.get(m)!.id}`).join(' ')),
+    tags: [...tags].join(' '),
+  };
+});
+---
+
+<Base breadcrumbs={[{ name: 'Evoluciones', path: '/evoluciones/' }]} title="Evoluciones: cómo evoluciona cada Pokémon en Cobblemon" description="Cómo evoluciona cada Pokémon en Cobblemon: nivel, piedras, amistad, intercambio, objetos y casos especiales.">
+  <h1 data-vt="sec-evoluciones" data-vt-hero>Evoluciones</h1>
+  <p class="intro">
+    Busca un Pokémon para ver su cadena evolutiva. Pasa el mouse (o toca en el celular) sobre los objetos y requisitos
+    para ver cómo conseguirlos.
+  </p>
+
+  <form id="evo-filters" class="filters" autocomplete="off">
+    <input type="search" name="q" placeholder="Buscar Pokémon…" aria-label="Buscar Pokémon" />
+    <div class="opts" role="radiogroup" aria-label="Método de evolución">
+      <label class="opt"><input type="radio" name="m" value="" checked /><span>Todos</span></label>
+      {
+        Object.entries(METHOD_TAGS).map(([k, name]) => (
+          <label class="opt">
+            <input type="radio" name="m" value={k} />
+            <span>{name}</span>
+          </label>
+        ))
+      }
+    </div>
+  </form>
+  <p class="count"><strong id="evo-count">{cards.length}</strong> familias</p>
+
+  <ul class="families">
+    {
+      cards.map((c) => (
+        <li data-names={c.names} data-tags={c.tags}>
+          <EvoTree slug={c.root} />
+        </li>
+      ))
+    }
+  </ul>
+  <p id="evo-empty" class="empty" hidden>No hay familias con ese filtro.</p>
+</Base>
+
+<script>
+  const form = document.getElementById('evo-filters') as HTMLFormElement;
+  const items = [...document.querySelectorAll<HTMLLIElement>('.families > li')];
+  const fold = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
+
+  function apply() {
+    const f = new FormData(form);
+    const q = fold(String(f.get('q') ?? '')).replace(/^#0*/, '');
+    const m = String(f.get('m') ?? '');
+    let shown = 0;
+    for (const li of items) {
+      const ok = (!q || li.dataset.names!.split(' ').some((w) => w.startsWith(q)) || li.dataset.names!.includes(q)) &&
+        (!m || li.dataset.tags!.split(' ').includes(m));
+      li.hidden = !ok;
+      if (ok) shown++;
+    }
+    document.getElementById('evo-count')!.textContent = String(shown);
+    document.getElementById('evo-empty')!.hidden = shown > 0;
+    const params = new URLSearchParams();
+    if (q) params.set('q', String(f.get('q')));
+    if (m) params.set('m', m);
+    history.replaceState(null, '', params.size ? `?${params}` : location.pathname);
+  }
+
+  const params = new URLSearchParams(location.search);
+  (form.elements.namedItem('q') as HTMLInputElement).value = params.get('q') ?? '';
+  form.querySelectorAll<HTMLInputElement>('input[name=m]').forEach((r) => (r.checked = r.value === (params.get('m') ?? '')));
+  form.addEventListener('input', apply);
+  form.addEventListener('submit', (e) => e.preventDefault());
+  apply();
+</script>
+
+<style>
+  .intro {
+    color: var(--muted);
+    margin-top: 0;
+  }
+  .filters {
+    position: sticky;
+    top: var(--header-h);
+    z-index: 5;
+    display: grid;
+    gap: 8px;
+    padding: 8px 0;
+    background: var(--bg);
+  }
+  input[type='search'] {
+    width: 100%;
+    padding: 10px 12px;
+    font: inherit;
+    font-size: 1.05rem;
+    color: inherit;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+  }
+  .opts {
+    display: flex;
+    gap: 6px;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .opt {
+    position: relative;
+  }
+  .opt input {
+    position: absolute;
+    opacity: 0;
+    pointer-events: none;
+  }
+  .opt span {
+    display: inline-block;
+    white-space: nowrap;
+    padding: 4px 12px;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    font-size: 0.85rem;
+    cursor: pointer;
+  }
+  .opt input:checked + span {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #fff;
+  }
+  .opt input:focus-visible + span {
+    outline: 2px solid var(--text);
+  }
+  .count {
+    color: var(--muted);
+  }
+  .families {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    gap: 14px;
+  }
+  .families > li {
+    padding: 14px;
+    background: color-mix(in srgb, var(--surface) 50%, transparent);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+  }
+  .empty {
+    padding: 20px;
+    text-align: center;
+    color: var(--muted);
+  }
+</style>

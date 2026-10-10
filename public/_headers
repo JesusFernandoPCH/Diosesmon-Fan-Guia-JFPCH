@@ -1,0 +1,16 @@
+# Cabeceras para Cloudflare Pages (se aplican al publicar).
+# HTTPS: Cloudflare da el certificado y redirige http → https solo. HSTS hace que el navegador use siempre HTTPS.
+/*
+  Strict-Transport-Security: max-age=31536000; includeSubDomains
+  X-Content-Type-Options: nosniff
+  X-Frame-Options: DENY
+  Referrer-Policy: strict-origin-when-cross-origin
+  Permissions-Policy: camera=(), microphone=(), geolocation=(), interest-cohort=()
+
+# Archivos con huella en el nombre (CSS/JS de Astro): caché de un año
+/_astro/*
+  Cache-Control: public, max-age=31536000, immutable
+
+# Imágenes: caché de una semana (cambian solo al regenerar los datos)
+/img/*
+  Cache-Control: public, max-age=604800

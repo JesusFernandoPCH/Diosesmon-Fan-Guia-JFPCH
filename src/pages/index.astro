@@ -1,0 +1,156 @@
+---
+import { Image } from 'astro:assets';
+import Base from '../layouts/Base.astro';
+import { artwork, sections } from '../data/sections';
+
+// Pokémon que flotan detrás del título (decorativos)
+const floaters = [
+  { id: 1, x: 6, y: 18, d: 0 },
+  { id: 4, x: 84, y: 8, d: 1.2 },
+  { id: 7, x: 70, y: 62, d: 0.6 },
+  { id: 152, x: 22, y: 70, d: 1.8 },
+  { id: 175, x: 92, y: 58, d: 2.4 },
+];
+---
+
+<Base
+  description="Guía en español de Cobblemon para el servidor Diosesmon: dónde aparece cada Pokémon, crianza 6x31 paso a paso, evoluciones, megas, interacciones y fusiones."
+>
+  <section class="intro">
+    <div class="floaters" aria-hidden="true">
+      {floaters.map((f) => <img src={`/img/thumb/${f.id}.webp`} alt="" width="64" height="64" style={`left:${f.x}%;top:${f.y}%;--d:${f.d}s`} />)}
+    </div>
+    <h1 class="rise">Todo lo que necesitas para <span>Cobblemon</span> en Diosesmon</h1>
+    <p class="rise" style="--i: 1">Información rápida, clara y directa. Elige una sección para empezar.</p>
+  </section>
+
+  <ul class="grid">
+    {
+      sections.map((s, i) => (
+        <li class="rise" style={`--i: ${i + 2}`}>
+          <a href={`/${s.slug}/`} class="card" style={`--c: ${s.color}`}>
+            <Image src={artwork(s.art)} alt="" width={160} height={160} format="webp" loading={i < 2 ? 'eager' : 'lazy'} />
+            <div>
+              <h2 data-vt={`sec-${s.slug}`}>{s.title}</h2>
+              <p>{s.desc}</p>
+            </div>
+          </a>
+        </li>
+      ))
+    }
+  </ul>
+</Base>
+
+<style>
+  .intro {
+    position: relative;
+    margin: 8px 0 28px;
+    padding: 28px 0 20px;
+    isolation: isolate;
+  }
+  .intro h1 {
+    max-width: 720px;
+    font-size: clamp(1.8rem, 5vw, 2.8rem);
+  }
+  .intro span {
+    color: var(--accent);
+    background: linear-gradient(90deg, var(--accent), #ff8a65, var(--accent));
+    background-size: 200% 100%;
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    animation: shine 4s linear infinite;
+  }
+  @keyframes shine {
+    to {
+      background-position: -200% 0;
+    }
+  }
+  .intro p {
+    margin: 0;
+    color: var(--muted);
+  }
+  .floaters {
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
+  }
+  .floaters img {
+    position: absolute;
+    width: 56px;
+    height: 56px;
+    opacity: 0.18;
+    animation: float 6s ease-in-out infinite;
+    animation-delay: var(--d);
+  }
+  @keyframes float {
+    50% {
+      transform: translateY(-12px) rotate(-4deg);
+    }
+  }
+  @media (max-width: 640px) {
+    .floaters img:nth-child(n + 4) {
+      display: none;
+    }
+  }
+  .grid {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    gap: 18px;
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr));
+  }
+  .card {
+    position: relative;
+    overflow: hidden;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 16px;
+    text-decoration: none;
+    background: linear-gradient(135deg, color-mix(in srgb, var(--c) 14%, var(--surface)), var(--surface) 60%);
+    border-radius: var(--radius);
+    transition:
+      transform 0.2s,
+      box-shadow 0.2s;
+  }
+  .card:hover {
+    transform: translateY(-3px);
+    box-shadow:
+      var(--neu),
+      0 0 0 2px var(--c);
+  }
+  .card:active {
+    transform: none;
+    box-shadow: var(--neu-in);
+  }
+  .card img {
+    flex: none;
+    width: 88px;
+    height: 88px;
+    filter: drop-shadow(0 4px 10px rgb(0 0 0 / 0.45));
+    transition: transform 0.25s;
+  }
+  .card:hover img {
+    transform: scale(1.08) rotate(-3deg);
+  }
+  .card h2 {
+    width: fit-content;
+    font-size: 1.25rem;
+    color: var(--c);
+  }
+  .card p {
+    margin: 0;
+    font-size: 0.92rem;
+    color: var(--muted);
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .floaters img,
+    .intro span {
+      animation: none;
+    }
+  }
+</style>

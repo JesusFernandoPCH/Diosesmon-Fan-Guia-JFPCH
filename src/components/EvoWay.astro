@@ -1,0 +1,217 @@
+---
+// Una forma de evolucionar explicada en piezas cortas, con ayudas emergentes donde hace falta.
+import Tip from './Tip.astro';
+import ItemChip from './ItemChip.astro';
+import MoonChip from './MoonChip.astro';
+import PlaceChip from './PlaceChip.astro';
+import BiomeList from './BiomeList.astro';
+import TypeChip from './TypeChip.astro';
+import Icon from './Icon.astro';
+import moves from '../data/moves.json';
+import { NATURES, STATS, TIMES, ZONES, formLabel, fromFormLabel, label } from '../data/labels';
+import { bySlug, type EvoGroup } from '../lib/evo';
+
+interface Props {
+  way: EvoGroup;
+  friendshipBase?: number;
+}
+const { way, friendshipBase } = Astro.props;
+const move = (m: string) => (moves as Record<string, string>)[m] ?? m;
+const pkm = (slug: string) => bySlug.get(slug)?.es ?? slug;
+const HOLD_HINT = 'Para equipárselo: agáchate (Shift) y haz clic derecho al Pokémon con el objeto en la mano.';
+const MOON_NAME: Record<string, string> = { FULL_MOON: '0', NEW_MOON: '4' };
+const level = way.reqs.find((r) => r.t === 'level');
+const rest = way.reqs.filter((r) => r !== level);
+---
+
+<span class="way">
+  {way.form && <span class="result"><Icon name="right" size={15} /> {formLabel(way.form)}</span>}
+  {way.fromForm && <span class="note">{fromFormLabel(way.fromForm)}</span>}
+
+  {/* Método principal */}
+  {
+    way.method === 'item_interact' && way.item && (
+      <span class="main">
+        <ItemChip id={way.item} prefix="Usar " hint="Haz clic derecho al Pokémon (fuera de su Poké Ball) con el objeto en la mano." />
+      </span>
+    )
+  }
+  {
+    way.method === 'trade' && (
+      <span class="main">
+        <Tip>
+          <Icon name="trade" size={16} /> Intercambio{way.tradeWith && ` por un ${pkm(way.tradeWith)}`}
+          <Fragment slot="tip">
+            <span class="tip-title">Evolución por intercambio</span>
+            <span class="tip-line">Intercambia el Pokémon con otro jugador y evolucionará al recibirlo.</span>
+            <span class="tip-line">
+              También puedes usar un <strong>Cordón Unión</strong>: clic derecho al Pokémon con el objeto en la mano.
+            </span>
+          </Fragment>
+        </Tip>
+        {way.method === 'trade' && <ItemChip id="cobblemon:link_cable" prefix="o " />}
+      </span>
+    )
+  }
+  {
+    way.method === 'level_up' && (
+      <span class="main"><Icon name="top" size={16} /> {level ? `Nivel ${level.minLevel}` : 'Subir de nivel'}</span>
+    )
+  }
+  {way.method !== 'level_up' && level && <span class="req">Nivel {level.minLevel}+</span>}
+
+  {/* Requisitos extra */}
+  {
+    rest.map((r) => {
+      switch (r.t) {
+        case 'friendship':
+          return (
+            <span class="req">
+              <Tip>
+                <Icon name="heart" size={15} /> Amistad alta ({r.amount}+)
+                <Fragment slot="tip">
+                  <span class="tip-title">Cómo subir la amistad</span>
+                  {friendshipBase !== undefined && (
+                    <span class="tip-line">
+                      Empieza con <strong>{friendshipBase}</strong> de amistad; necesita <strong>{r.amount}</strong> (máximo 255).
+                    </span>
+                  )}
+                  <span class="tip-line">• Súbelo de nivel combatiendo o con <ItemChip id="cobblemon:rare_candy" plain />.</span>
+                  <span class="tip-line">
+                    • Dale bayas que bajan EVs: <ItemChip id="cobblemon:pomeg_berry" plain />, <ItemChip id="cobblemon:kelpsy_berry" plain />,{' '}
+                    <ItemChip id="cobblemon:qualot_berry" plain />, <ItemChip id="cobblemon:hondew_berry" plain />,{' '}
+                    <ItemChip id="cobblemon:grepa_berry" plain />, <ItemChip id="cobblemon:tamato_berry" plain />.
+                  </span>
+                  <span class="tip-line">
+                    • Equípale un <ItemChip id="cobblemon:soothe_bell" plain /> para ganar amistad más rápido.
+                  </span>
+                  <span class="tip-line">
+                    • Atrápalo con <ItemChip id="cobblemon:luxury_ball" plain /> (doble de amistad) o <ItemChip id="cobblemon:friend_ball" plain /> (empieza en 150).
+                  </span>
+                  <span class="tip-line">• Evita las hierbas medicinales amargas: bajan la amistad.</span>
+                </Fragment>
+              </Tip>
+            </span>
+          );
+        case 'time_range':
+          return <span class="req"><Icon name={r.range === 'night' ? 'moon' : r.range === 'dusk' ? 'sunset' : 'sun'} size={15} /> {TIMES[r.range] ?? r.range}</span>;
+        case 'held_item':
+          return r.itemCondition.startsWith('#') ? (
+            <span class="req">Llevando: {label({}, r.itemCondition)}</span>
+          ) : (
+            <span class="req">
+              <ItemChip id={r.itemCondition} prefix="Llevando equipado: " hint={HOLD_HINT} />
+            </span>
+          );
+        case 'has_move':
+          return <span class="req"><Icon name="book" size={15} /> Conocer el movimiento <strong>{move(r.move)}</strong></span>;
+        case 'has_move_type':
+          return (
+            <span class="req">
+              <Icon name="book" size={15} /> Conocer un movimiento de tipo <TypeChip type={r.type} small />
+            </span>
+          );
+        case 'use_move':
+          return (
+            <span class="req">
+              <Icon name="sword" size={15} /> Usar <strong>{move(r.move)}</strong> {r.amount} veces en combate
+            </span>
+          );
+        case 'biome':
+          return (
+            <span class="req block">
+              <Icon name={r.anti ? 'ban' : 'map'} size={15} /> {r.anti ? 'Excepto en:' : 'Estando en:'} <BiomeList biomes={r.biomes} zones={[r.zone]} max={3} />
+            </span>
+          );
+        case 'structure':
+          return (
+            <span class="req">
+              {r.structureAnticondition ? 'Lejos de: ' : 'Cerca de: '}
+              <PlaceChip place="village" prefix="" />
+            </span>
+          );
+        case 'moon_phase':
+          return (
+            <span class="req">
+              <MoonChip value={MOON_NAME[r.moonPhase] ?? '0'} />
+            </span>
+          );
+        case 'weather':
+          return <span class="req"><Icon name={r.isThundering ? 'storm' : r.isRaining ? 'rain' : 'sun'} size={15} /> {r.isThundering ? 'Con tormenta' : r.isRaining ? 'Mientras llueve' : 'Sin lluvia'}</span>;
+        case 'properties': {
+          const [k, v] = r.target.split(' ').pop()!.split('=');
+          const text =
+            k === 'gender' ? (v === 'male' ? 'Solo machos' : 'Solo hembras')
+            : k === 'nickname' ? `Con el mote “${v}”`
+            : k.startsWith('gimmighoul_coins') ? `Tener ${v} Monedas de Gimmighoul`
+            : k.startsWith('gimmighoul_netherite') ? `Tener ${v} de Netherita en Gimmighoul`
+            : `${k}: ${v}`;
+          return <span class="req">{text}</span>;
+        }
+        case 'property_range':
+          return <span class="req">Netherita entre {r.range}</span>;
+        case 'party_member':
+          return <span class="req"><Icon name="users" size={15} /> Con {pkm(r.target)} en el equipo</span>;
+        case 'stat_compare':
+          return <span class="req"><Icon name="chart" size={15} /> {STATS[r.highStat]} mayor que {STATS[r.lowStat]}</span>;
+        case 'stat_equal':
+          return <span class="req"><Icon name="chart" size={15} /> {STATS[r.statOne]} igual a {STATS[r.statTwo]}</span>;
+        case 'battle_critical_hits':
+          return <span class="req"><Icon name="burst" size={15} /> Dar {r.amount} golpes críticos en un mismo combate</span>;
+        case 'recoil':
+          return <span class="req"><Icon name="bolt" size={15} /> Recibir {r.amount} PS de daño por retroceso</span>;
+        case 'damage_taken':
+          return <span class="req"><Icon name="bandage" size={15} /> Perder al menos {r.amount} PS en combate en combates sin debilitarse</span>;
+        case 'blocks_traveled':
+          return <span class="req"><Icon name="steps" size={15} /> Caminar {r.amount} bloques con él fuera de la Poké Ball</span>;
+        case 'advancement':
+          return <span class="req"><Icon name="trophy" size={15} /> {r.requiredAdvancement.endsWith('catch_all_vivillon') ? 'Completar el logro de capturar todos los diseños de Vivillon' : `Completar el logro ${r.requiredAdvancement}`}</span>;
+        default:
+          return <span class="req">{r.t}</span>;
+      }
+    })
+  }
+  {way.natures && <span class="req block">Naturaleza: {way.natures.map((n) => NATURES[n] ?? n).join(', ')}</span>}
+</span>
+
+<style>
+  .way {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    align-items: center;
+    font-size: 0.85rem;
+  }
+  .main {
+    display: inline-flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    align-items: center;
+    padding: 3px 10px;
+    border-radius: 8px;
+    background: color-mix(in srgb, var(--accent) 22%, var(--surface-2));
+    font-weight: 600;
+  }
+  .req {
+    display: inline-flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    align-items: center;
+    padding: 3px 8px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+  }
+  .req.block {
+    width: 100%;
+  }
+  .note,
+  .result {
+    font-size: 0.78rem;
+    color: var(--muted);
+  }
+  .result {
+    width: 100%;
+    color: #ffd54f;
+    font-weight: 600;
+  }
+</style>

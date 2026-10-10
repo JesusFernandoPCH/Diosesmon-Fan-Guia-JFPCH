@@ -1,0 +1,136 @@
+---
+import Base from '../layouts/Base.astro';
+import FusionCard from '../components/FusionCard.astro';
+import ItemChip from '../components/ItemChip.astro';
+import { FUSIONS } from '../data/fusions';
+import { bySlug } from '../lib/evo';
+import Icon from '../components/Icon.astro';
+
+// solo fusiones cuyos dos Pokémon están habilitados en el servidor
+const fusions = FUSIONS.filter((f) => bySlug.has(f.a) && bySlug.has(f.b));
+---
+
+<Base breadcrumbs={[{ name: 'Fusiones', path: '/fusiones/' }]} title="Fusiones: combinaciones exclusivas y Punta ADN" description="Fusiones exclusivas del servidor Diosesmon: qué dos Pokémon combinar, requisitos y la Punta ADN.">
+  <h1 data-vt="sec-fusiones" data-vt-hero>Fusiones</h1>
+  <p class="intro">
+    Exclusivas de Diosesmon: combina dos Pokémon para crear uno nuevo, con tipos, habilidades y estadísticas propias. Puedes
+    usarlas en los torneos y eventos del servidor.
+    <a class="wiki" href="https://wiki.diosesmon.net/tutoriales/fusiones?utm_source=guia-diosesmon&utm_medium=referral&utm_campaign=fusiones" target="_blank" rel="noopener">Ver en la wiki oficial ↗</a>
+  </p>
+
+  <details class="howto" open>
+    <summary>¿Cómo fusionar?</summary>
+    <ol>
+      <li>Craftea una <ItemChip id="diosesmon:punta_adn" /> (toca o pasa el mouse para ver la receta). Cada fusión gasta una.</li>
+      <li>Ten a los dos Pokémon de la lista en tu equipo o en el PC, <strong>curados</strong> (no se puede durante un combate ni con huevos).</li>
+      <li>Habla con el <strong>NPC de fusiones</strong> del laboratorio, elige los dos Pokémon y confirma.</li>
+      <li>La fusión llega a tu equipo, o a tu PC si el equipo está lleno.</li>
+    </ol>
+    <ul class="rules">
+      <li><Icon name="alert" /> <strong>Es permanente</strong>: los dos Pokémon y la Punta ADN se consumen y no se puede deshacer.</li>
+      <li><Icon name="check" /> Hereda el <strong>mejor IV</strong> de cada estadística entre los dos padres.</li>
+      <li><Icon name="close" /> No hereda EVs, movimientos ni objetos equipados: quítales los objetos antes.</li>
+      <li>Ambos deben tener el nivel que pide el servidor.</li>
+    </ul>
+  </details>
+
+  <form id="fus-filters" class="filters" autocomplete="off">
+    <input type="search" name="q" placeholder="Buscar fusión o Pokémon…" aria-label="Buscar fusión o Pokémon" />
+  </form>
+  <p class="count"><strong id="fus-count">{fusions.length}</strong> fusiones</p>
+
+  <div class="grid" id="fus-list">
+    {fusions.map((f) => <FusionCard f={f} />)}
+  </div>
+  <p id="fus-empty" class="empty" hidden>Ninguna fusión coincide.</p>
+</Base>
+
+<script>
+  const input = document.querySelector<HTMLInputElement>('#fus-filters input')!;
+  const cards = [...document.querySelectorAll<HTMLElement>('#fus-list > .fusion')];
+  const fold = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
+
+  function apply() {
+    const q = fold(input.value);
+    let shown = 0;
+    for (const c of cards) {
+      c.hidden = !!q && !fold(c.dataset.name!).includes(q);
+      if (!c.hidden) shown++;
+    }
+    document.getElementById('fus-count')!.textContent = String(shown);
+    document.getElementById('fus-empty')!.hidden = shown > 0;
+  }
+  input.value = new URLSearchParams(location.search).get('q') ?? '';
+  input.addEventListener('input', apply);
+  document.getElementById('fus-filters')!.addEventListener('submit', (e) => e.preventDefault());
+  apply();
+</script>
+
+<style>
+  .wiki {
+    color: #8ab4ff;
+    white-space: nowrap;
+  }
+  .intro {
+    color: var(--muted);
+    margin-top: 0;
+  }
+  .howto {
+    margin-bottom: 16px;
+    padding: 12px 16px;
+    background: linear-gradient(135deg, color-mix(in srgb, #7ad3e8 18%, var(--surface)), var(--surface) 60%);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+  }
+  .howto summary {
+    cursor: pointer;
+    font: 600 1.05rem var(--font-title);
+  }
+  .howto ol {
+    margin: 10px 0 0;
+    padding-left: 20px;
+    display: grid;
+    gap: 8px;
+  }
+  .rules {
+    margin: 12px 0 0;
+    padding: 0;
+    list-style: none;
+    display: grid;
+    gap: 6px;
+    font-size: 0.92rem;
+  }
+  .filters {
+    position: sticky;
+    top: var(--header-h);
+    z-index: 5;
+    padding: 8px 0;
+    background: var(--bg);
+  }
+  input {
+    width: 100%;
+    padding: 10px 12px;
+    font: inherit;
+    font-size: 1.05rem;
+    color: inherit;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+  }
+  .count {
+    color: var(--muted);
+  }
+  .grid {
+    display: grid;
+    gap: 12px;
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 340px), 1fr));
+  }
+  .grid > :global([hidden]) {
+    display: none;
+  }
+  .empty {
+    padding: 20px;
+    text-align: center;
+    color: var(--muted);
+  }
+</style>

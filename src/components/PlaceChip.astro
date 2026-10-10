@@ -1,0 +1,35 @@
+---
+import { existsSync } from 'node:fs';
+import Tip from './Tip.astro';
+import Icon from './Icon.astro';
+import { PLACES, label } from '../data/labels';
+
+interface Props {
+  place: string;
+  prefix?: string;
+}
+const { place, prefix = '' } = Astro.props;
+const name = label(PLACES, place);
+const img = existsSync(`public/img/place/${place}.webp`) ? `/img/place/${place}.webp` : undefined;
+---
+
+{
+  img ? (
+    <Tip>
+      <span>
+        <Icon name="pin" size={15} />
+        {prefix}
+        {name}
+      </span>
+      <Fragment slot="tip">
+        <img src={img} alt={name} width="320" height="180" loading="lazy" />
+        <span class="tip-title">{name}</span>
+      </Fragment>
+    </Tip>
+  ) : (
+    <span>
+      {prefix}
+      {name}
+    </span>
+  )
+}

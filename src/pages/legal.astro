@@ -1,0 +1,69 @@
+---
+import Base from '../layouts/Base.astro';
+---
+
+<Base title="Privacidad y términos de uso" description="Qué datos guarda la Guía Diosesmon (solo en tu navegador) y las condiciones de uso de esta guía comunitaria no oficial.">
+  <article class="legal panel">
+    <h1>Privacidad y términos de uso</h1>
+    <p class="upd">Última actualización: 9 de octubre de 2026</p>
+
+    <h2>Privacidad</h2>
+    <ul>
+      <li><strong>No pedimos cuentas, correos ni datos personales.</strong></li>
+      <li>
+        El planificador de <a href="/crianza/">Crianza</a> guarda tu progreso <strong>solo en tu navegador</strong> (almacenamiento local).
+        No se envía a ningún servidor. Puedes borrarlo con el botón «Empezar de nuevo» o borrando los datos del sitio en tu navegador.
+      </li>
+      <li>Al guardar la crianza en archivo, el archivo se descarga a tu dispositivo; nosotros no recibimos una copia.</li>
+      <li>No usamos cookies de publicidad ni de seguimiento.</li>
+      <li>
+        La web está alojada en Cloudflare, que puede registrar datos técnicos de las visitas (como la dirección IP) para dar el servicio y
+        proteger el sitio, según su propia política de privacidad.
+      </li>
+    </ul>
+
+    <h2>Términos de uso</h2>
+    <ul>
+      <li>
+        Esta es una <strong>guía comunitaria no oficial</strong> para jugadores del servidor Diosesmon. No está afiliada a Nintendo, Game
+        Freak, The Pokémon Company ni al equipo de Cobblemon.
+      </li>
+      <li>Pokémon y sus nombres son marcas de sus respectivos dueños. Las imágenes de Pokémon se usan solo con fines informativos.</li>
+      <li>
+        Los datos salen de los archivos de Cobblemon, de los mods del servidor y de PokeAPI. Las imágenes de biomas y estructuras vienen de
+        la Minecraft Wiki (licencia CC BY-NC-SA). Hacemos lo posible por mantenerlos al día, pero pueden tener errores o cambiar con las
+        actualizaciones del servidor.
+      </li>
+      <li>Los costos de crianza son aproximados y pueden variar según los precios del servidor.</li>
+      <li>La guía es gratuita y se ofrece «tal cual», sin garantías.</li>
+    </ul>
+  </article>
+</Base>
+
+<style>
+  .legal {
+    max-width: 760px;
+    margin: 0 auto;
+    padding: 20px 24px;
+    background: var(--surface);
+    border-radius: var(--radius);
+    line-height: 1.7;
+  }
+  .upd {
+    margin-top: 0;
+    color: var(--muted);
+    font-size: 0.85rem;
+  }
+  h2 {
+    margin-top: 1.4em;
+    font-size: 1.2rem;
+  }
+  ul {
+    display: grid;
+    gap: 8px;
+    padding-left: 20px;
+  }
+  a {
+    color: #8ab4ff;
+  }
+</style>

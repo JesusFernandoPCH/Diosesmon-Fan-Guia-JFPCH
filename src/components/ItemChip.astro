@@ -1,0 +1,116 @@
+---
+// Objeto con icono; al pasar el mouse/tocar muestra para qué sirve y cómo conseguirlo.
+import { existsSync } from 'node:fs';
+import Tip from './Tip.astro';
+import itemData from '../data/items.json';
+import type { Item } from '../data/types';
+import { CUSTOM_ITEMS, obtainOf } from '../data/obtain';
+import { bySlug } from '../lib/evo';
+import Icon from './Icon.astro';
+
+interface Props {
+  id: string;
+  prefix?: string;
+  hint?: string; // instrucción de uso (ej. "Clic derecho al Pokémon con el objeto")
+  plain?: boolean; // solo icono + nombre, sin ayuda (para usar dentro de otra ayuda)
+}
+const { id, prefix, hint, plain } = Astro.props;
+const item = (itemData as Record<string, Item>)[id] ?? CUSTOM_ITEMS[id] ?? { es: id.split(':').pop()!.replace(/_/g, ' ') };
+const how = obtainOf(id);
+const [ns, path] = id.split(':');
+const recipeFile = `/img/recipe/${ns}_${path}.webp`;
+const recipe = how.recipe && existsSync(`public${recipeFile}`) ? recipeFile : undefined;
+const ores = !!(how.ores && item.ores?.length);
+// solo Pokémon disponibles en el servidor
+const dropList = item.drops?.filter((d) => bySlug.has(d.slug)) ?? [];
+const drops = !!(how.drops && dropList.length);
+---
+
+{
+  plain && (
+    <span class="item">
+      {item.icon && <img src={item.icon} alt="" width="22" height="22" loading="lazy" />}
+      {prefix}
+      {item.es}
+    </span>
+  )
+}
+{!plain && (
+<Tip>
+  <span class="item">
+    {item.icon && <img src={item.icon} alt="" width="22" height="22" loading="lazy" />}
+    {prefix}{item.es}
+  </span>
+  <Fragment slot="tip">
+    <span class="head">
+      {item.icon && <img src={item.icon} alt="" width="40" height="40" loading="lazy" />}
+      <span class="tip-title">{item.es}</span>
+    </span>
+    {item.desc && <span class="tip-line">{item.desc}</span>}
+    {hint && <span class="tip-line hint"><Icon name="pointer" size={15} /> {hint}</span>}
+    {(how.text || ores || drops || recipe) && <span class="tip-title small">Cómo conseguirlo</span>}
+    {ores && <span class="tip-line"><Icon name="pickaxe" size={15} /> <strong>Minando:</strong> {item.ores!.join(', ')}</span>}
+    {
+      how.text?.map((line) => (
+        <span class="tip-line">
+          <Icon name={line.icon} size={15} /> {line.text}
+        </span>
+      ))
+    }
+    {recipe && <img class="recipe" src={recipe} alt={`Receta de ${item.es}`} loading="lazy" />}
+    {
+      drops && (
+        <span class="tip-line">
+          <Icon name="gift" size={15} /> <strong>Lo sueltan al derrotarlos:</strong>{' '}
+          {dropList.slice(0, 6).map((d, i) => (
+            <>
+              {i > 0 && ', '}
+              <a href={`/pokemon/${d.slug}/`}>{d.es}</a> ({d.pct}%)
+            </>
+          ))}
+          {dropList.length > 6 && ` y ${dropList.length - 6} más`}
+        </span>
+      )
+    }
+  </Fragment>
+</Tip>
+)}
+
+<style>
+  .item {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-weight: 600;
+  }
+  .item img,
+  .head img {
+    image-rendering: pixelated;
+  }
+  .head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .small {
+    margin-top: 10px;
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--muted);
+  }
+  .recipe {
+    display: block;
+    width: 100%;
+    max-width: 260px;
+    height: auto;
+    margin-top: 6px;
+    image-rendering: pixelated;
+  }
+  .hint {
+    color: #ffd54f;
+  }
+  a {
+    color: #8ab4ff;
+  }
+</style>

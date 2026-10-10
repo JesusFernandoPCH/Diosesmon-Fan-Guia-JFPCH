@@ -1,0 +1,135 @@
+---
+import Base from '../layouts/Base.astro';
+import MegaCard from '../components/MegaCard.astro';
+import ItemChip from '../components/ItemChip.astro';
+import { TYPES } from '../data/labels';
+import { bySlug } from '../lib/evo';
+import { megas as available } from '../data/obtain';
+
+const megas = [...available].sort((a, b) => bySlug.get(a.slug)!.id - bySlug.get(b.slug)!.id || a.form.localeCompare(b.form));
+const mods = [...new Set(megas.map((m) => m.mod))];
+---
+
+<Base breadcrumbs={[{ name: 'Mega Evoluciones', path: '/megas/' }]} title="Mega Evoluciones: megapiedras, tipos y estadísticas" description="Todas las megaevoluciones del servidor Diosesmon (Mega Showdown y ZA Megas): piedra necesaria, cambio de tipos y estadísticas.">
+  <h1 data-vt="sec-megas" data-vt-hero>Mega Evoluciones</h1>
+  <p class="intro">{megas.length} megaevoluciones disponibles en el servidor (mods Mega Showdown y ZA Megas).</p>
+
+  <details class="howto" open>
+    <summary>¿Cómo mega evolucionar?</summary>
+    <ol>
+      <li>Consigue una <ItemChip id="mega_showdown:mega_bracelet" /> y llévala equipada.</li>
+      <li>
+        Consigue la megapiedra de tu Pokémon: <strong>derrota a su Mega salvaje</strong> (aparecen al azar en cualquier bioma). Al
+        ganarle tienes un <strong>90%</strong> de probabilidad de obtener la piedra, además de <strong>500 Pokédólares</strong>.
+      </li>
+      <li>Equípale la piedra a tu Pokémon: <strong>Shift + clic derecho</strong> con la piedra en la mano.</li>
+      <li>En combate, usa la opción de <strong>Mega Evolución</strong>. Vuelve a su forma normal al terminar el combate.</li>
+    </ol>
+  </details>
+
+  <form id="mega-filters" class="filters" autocomplete="off">
+    <input type="search" name="q" placeholder="Buscar Pokémon…" aria-label="Buscar Pokémon" />
+    <select name="mod" aria-label="Mod">
+      <option value="">Todos los mods</option>
+      {mods.map((m) => <option value={m}>{m}</option>)}
+    </select>
+    <select name="type" aria-label="Tipo de la mega">
+      <option value="">Cualquier tipo</option>
+      {Object.entries(TYPES).map(([k, [name]]) => <option value={k}>{name}</option>)}
+    </select>
+  </form>
+  <p class="count"><strong id="mega-count">{megas.length}</strong> megas</p>
+
+  <div class="grid" id="mega-list">
+    {megas.map((m) => <MegaCard m={m} />)}
+  </div>
+  <p id="mega-empty" class="empty" hidden>Ninguna mega coincide.</p>
+</Base>
+
+<script>
+  const form = document.getElementById('mega-filters') as HTMLFormElement;
+  const cards = [...document.querySelectorAll<HTMLElement>('#mega-list > .mega')];
+  const fold = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
+  const names = cards.map((c) => fold(c.dataset.name!));
+
+  function apply() {
+    const f = new FormData(form);
+    const q = fold(String(f.get('q') ?? ''));
+    const mod = String(f.get('mod') ?? '');
+    const type = String(f.get('type') ?? '');
+    let shown = 0;
+    cards.forEach((c, i) => {
+      const ok = (!q || names[i].includes(q)) && (!mod || c.dataset.mod === mod) && (!type || c.dataset.types!.split(' ').includes(type));
+      c.hidden = !ok;
+      if (ok) shown++;
+    });
+    document.getElementById('mega-count')!.textContent = String(shown);
+    document.getElementById('mega-empty')!.hidden = shown > 0;
+  }
+  form.addEventListener('input', apply);
+  form.addEventListener('submit', (e) => e.preventDefault());
+</script>
+
+<style>
+  .intro {
+    color: var(--muted);
+    margin-top: 0;
+  }
+  .howto {
+    margin-bottom: 16px;
+    padding: 12px 16px;
+    background: linear-gradient(135deg, color-mix(in srgb, #7c4dff 18%, var(--surface)), var(--surface) 60%);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+  }
+  .howto summary {
+    cursor: pointer;
+    font: 600 1.05rem var(--font-title);
+  }
+  .howto ol {
+    margin: 10px 0 0;
+    padding-left: 20px;
+    display: grid;
+    gap: 8px;
+  }
+  .filters {
+    position: sticky;
+    top: var(--header-h);
+    z-index: 5;
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 8px;
+    padding: 8px 0;
+    background: var(--bg);
+  }
+  @media (min-width: 640px) {
+    .filters {
+      grid-template-columns: 1fr auto auto;
+    }
+  }
+  input,
+  select {
+    padding: 10px 12px;
+    font: inherit;
+    color: inherit;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+  }
+  .count {
+    color: var(--muted);
+  }
+  .grid {
+    display: grid;
+    gap: 12px;
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 340px), 1fr));
+  }
+  .grid > :global([hidden]) {
+    display: none;
+  }
+  .empty {
+    padding: 20px;
+    text-align: center;
+    color: var(--muted);
+  }
+</style>

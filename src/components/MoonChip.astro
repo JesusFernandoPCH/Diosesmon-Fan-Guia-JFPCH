@@ -1,0 +1,62 @@
+---
+import Tip from './Tip.astro';
+import { MOON_PHASES, moonLabel, moonPhases } from '../data/labels';
+
+interface Props {
+  value: string; // "0", "0,4", "1-3"…
+}
+const phases = moonPhases(Astro.props.value);
+---
+
+<Tip>
+  <span class="moon">
+    <img src={`/img/moon/${phases[0]}.webp`} alt="" width="18" height="18" />
+    {moonLabel(Astro.props.value)}
+  </span>
+  <Fragment slot="tip">
+    <span class="tip-title">Fase lunar necesaria</span>
+    <span class="phases">
+      {
+        MOON_PHASES.map((name, i) => (
+          <span class:list={['phase', { on: phases.includes(i) }]}>
+            <img src={`/img/moon/${i}.webp`} alt="" width="40" height="40" loading="lazy" />
+            {name}
+          </span>
+        ))
+      }
+    </span>
+    <span class="tip-line">La luna cambia de fase cada noche (ciclo de 8 días). Mírala en el cielo de noche.</span>
+  </Fragment>
+</Tip>
+
+<style>
+  .moon {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+  }
+  img {
+    image-rendering: pixelated;
+    border-radius: 4px;
+    background: #0b1020;
+  }
+  .phases {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 6px;
+    margin-top: 6px;
+  }
+  .phase {
+    display: grid;
+    justify-items: center;
+    gap: 2px;
+    font-size: 0.7rem;
+    text-align: center;
+    opacity: 0.35;
+  }
+  .phase.on {
+    opacity: 1;
+    font-weight: 600;
+    color: #ffd54f;
+  }
+</style>

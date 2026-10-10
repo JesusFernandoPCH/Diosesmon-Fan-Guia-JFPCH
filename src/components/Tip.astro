@@ -1,0 +1,70 @@
+---
+// Ayuda emergente: aparece al pasar el mouse (PC) o al tocar (móvil, como hoja inferior).
+// Uso: <Tip>disparador<Fragment slot="tip">contenido</Fragment></Tip>
+---
+
+<span class="tip" tabindex="0">
+  <slot />
+  <span class="tip-box" role="tooltip">
+    <slot name="tip" />
+  </span>
+</span>
+
+<style is:global>
+  .tip {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    cursor: help;
+    border-bottom: 1px dotted var(--muted);
+  }
+  .tip-box {
+    display: none;
+    position: absolute;
+    z-index: 30;
+    left: 0;
+    bottom: calc(100% + 8px);
+    width: max-content;
+    max-width: min(320px, 85vw);
+    padding: 12px;
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    box-shadow: 0 10px 30px rgb(0 0 0 / 0.5);
+    font-size: 0.85rem;
+    line-height: 1.45;
+    color: var(--text);
+    text-align: left;
+    cursor: auto;
+  }
+  .tip:hover > .tip-box,
+  .tip:focus-within > .tip-box {
+    display: block;
+  }
+  .tip-box img {
+    border-radius: 8px;
+  }
+  .tip-box .tip-title {
+    display: block;
+    margin: 6px 0 2px;
+    font: 600 0.95rem var(--font-title);
+  }
+  .tip-box .tip-line {
+    display: block;
+    margin-top: 4px;
+  }
+  /* En pantallas táctiles o angostas la ayuda sale como hoja abajo, siempre visible completa */
+  @media (hover: none), (max-width: 640px) {
+    .tip-box {
+      position: fixed;
+      left: 12px;
+      right: 12px;
+      bottom: 12px;
+      width: auto;
+      max-width: none;
+      max-height: 70dvh;
+      overflow-y: auto;
+    }
+  }
+</style>

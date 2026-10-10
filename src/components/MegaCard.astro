@@ -1,0 +1,181 @@
+---
+// Tarjeta de una megaevolución: piedra, cambio de tipos, habilidad y estadísticas.
+import TypeChip from './TypeChip.astro';
+import Icon from './Icon.astro';
+import ItemChip from './ItemChip.astro';
+import abilities from '../data/abilities.json';
+import { pretty } from '../data/labels';
+import { bySlug } from '../lib/evo';
+import { megaName } from '../data/obtain';
+import type { Mega, Stats } from '../data/types';
+
+interface Props {
+  m: Mega;
+}
+const { m } = Astro.props;
+const p = bySlug.get(m.slug)!;
+const name = megaName(m);
+const sameTypes = m.types.join() === p.types.join();
+const total = (s: Stats) => Object.values(s).reduce((a, b) => a + b, 0);
+const STAT_SHORT = { hp: 'PS', attack: 'Atq', defence: 'Def', special_attack: 'At.Esp', special_defence: 'Def.Esp', speed: 'Vel' };
+const abilityName = (a: string) => (abilities as Record<string, string>)[a] ?? pretty(a);
+---
+
+<article class="mega" data-name={`${name} ${p.en}`.toLowerCase()} data-mod={m.mod} data-types={m.types.join(' ')}>
+  <div class="art">
+    <img src={m.art ?? `/img/art/${p.id}.webp`} alt={name} width="160" height="160" loading="lazy" />
+    {!m.art && <span class="badge">MEGA</span>}
+  </div>
+  <div class="info">
+    <span class="mod">{m.mod}</span>
+    <h3><a href={`/pokemon/${p.slug}/`}>{name}</a></h3>
+
+    <div class="row">
+      {m.stone ? <ItemChip id={m.stone} hint="Equípasela al Pokémon (Shift + clic derecho con la piedra en la mano)." /> : <span><Icon name="book" size={15} /> Conocer <strong>{m.move}</strong> (sin piedra)</span>}
+    </div>
+
+    <div class="row types">
+      {p.types.map((t) => <TypeChip type={t} small />)}
+      {!sameTypes && (
+        <>
+          <span class="to">→</span>
+          {m.types.map((t) => (
+            <TypeChip type={t} small />
+          ))}
+        </>
+      )}
+      {sameTypes && <span class="same">(mismos tipos)</span>}
+    </div>
+
+    <div class="row">Habilidad: <strong>{m.abilities.map(abilityName).join(' / ')}</strong></div>
+
+    <details class="stats">
+      <summary>Estadísticas: {total(m.base)} → <strong>{total(m.stats)}</strong></summary>
+      <table>
+        {
+          (Object.keys(STAT_SHORT) as (keyof Stats)[]).map((k) => {
+            const d = m.stats[k] - m.base[k];
+            return (
+              <tr>
+                <th>{STAT_SHORT[k]}</th>
+                <td class="bar"><span style={`width: ${Math.min(100, (m.stats[k] / 200) * 100)}%`} /></td>
+                <td>{m.stats[k]}</td>
+                <td class:list={['diff', { up: d > 0, down: d < 0 }]}>{d > 0 ? `+${d}` : d < 0 ? d : ''}</td>
+              </tr>
+            );
+          })
+        }
+      </table>
+    </details>
+  </div>
+</article>
+
+<style>
+  .mega {
+    display: flex;
+    gap: 12px;
+    padding: 12px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+  }
+  .art {
+    position: relative;
+    flex: none;
+    width: 96px;
+  }
+  .art img {
+    width: 96px;
+    height: 96px;
+    filter: drop-shadow(0 4px 10px rgb(0 0 0 / 0.45));
+  }
+  .badge {
+    position: absolute;
+    left: 50%;
+    bottom: -4px;
+    transform: translateX(-50%);
+    padding: 1px 8px;
+    border-radius: 99px;
+    background: linear-gradient(90deg, #7c4dff, #e040fb, #ff4081);
+    color: #fff;
+    font: 700 0.7rem var(--font-title);
+    letter-spacing: 0.08em;
+  }
+  .info {
+    flex: 1;
+    min-width: 0;
+    display: grid;
+    gap: 6px;
+    align-content: start;
+  }
+  .mod {
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--muted);
+  }
+  h3 {
+    margin: 0;
+    font-size: 1.1rem;
+  }
+  h3 a {
+    text-decoration: none;
+  }
+  .row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    align-items: center;
+    font-size: 0.85rem;
+  }
+  .to {
+    color: var(--accent);
+    font-weight: 700;
+  }
+  .same {
+    font-size: 0.75rem;
+    color: var(--muted);
+  }
+  .stats {
+    font-size: 0.82rem;
+  }
+  .stats summary {
+    cursor: pointer;
+    color: var(--muted);
+  }
+  table {
+    width: 100%;
+    margin-top: 6px;
+    border-collapse: collapse;
+  }
+  th {
+    width: 4.5em;
+    white-space: nowrap;
+    text-align: left;
+    font-weight: 400;
+    color: var(--muted);
+  }
+  td {
+    padding: 1px 4px;
+    text-align: right;
+  }
+  .bar {
+    width: 100%;
+  }
+  .bar span {
+    display: block;
+    height: 6px;
+    border-radius: 3px;
+    background: linear-gradient(90deg, #7c4dff, #e040fb);
+  }
+  .diff {
+    width: 3em;
+    font-size: 0.75rem;
+  }
+  .up {
+    color: #69f0ae;
+  }
+  .down {
+    color: #ff8a80;
+  }
+</style>

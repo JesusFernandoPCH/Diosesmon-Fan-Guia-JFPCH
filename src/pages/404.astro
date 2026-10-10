@@ -1,0 +1,75 @@
+---
+import Base from '../layouts/Base.astro';
+import { sections } from '../data/sections';
+import Icon from '../components/Icon.astro';
+---
+
+<Base title="Página no encontrada" description="Esta página no existe en la Guía Diosesmon.">
+  <section class="lost">
+    <img class="rise" src="/img/art/54.webp" alt="Psyduck confundido" width="220" height="220" />
+    <p class="code rise" style="--i: 1">404</p>
+    <h1 class="rise" style="--i: 2">¡Psyduck no encuentra esta página!</h1>
+    <p class="rise" style="--i: 3">Puede que el enlace esté mal escrito o que la página ya no exista. Prueba con alguna sección:</p>
+    <nav class="rise" style="--i: 4" aria-label="Secciones">
+      <a href="/" class="home"><Icon name="home" /> Inicio</a>
+      {
+        sections.map((s) => (
+          <a href={`/${s.slug}/`} style={`--c: ${s.color}`}>
+            <img src={`/img/thumb/${s.art}.webp`} alt="" width="32" height="32" />
+            {s.title}
+          </a>
+        ))
+      }
+    </nav>
+  </section>
+</Base>
+
+<style>
+  .lost {
+    display: grid;
+    justify-items: center;
+    text-align: center;
+    padding: 20px 0;
+  }
+  .lost > img {
+    width: 200px;
+    height: 200px;
+    animation: wobble 2.4s ease-in-out infinite;
+  }
+  @keyframes wobble {
+    50% {
+      transform: rotate(-6deg) translateY(-6px);
+    }
+  }
+  .code {
+    margin: 0;
+    font: 800 4rem/1 var(--font-title);
+    color: var(--accent);
+  }
+  .lost > p {
+    max-width: 480px;
+    color: var(--muted);
+  }
+  nav {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 10px;
+    margin-top: 10px;
+  }
+  nav a {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 14px;
+    border-radius: 999px;
+    background: var(--surface);
+    box-shadow: var(--neu-sm);
+    text-decoration: none;
+    font-weight: 600;
+    color: var(--c, var(--text));
+  }
+  nav a:active {
+    box-shadow: var(--neu-in);
+  }
+</style>
