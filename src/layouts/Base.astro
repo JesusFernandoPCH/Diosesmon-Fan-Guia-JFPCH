@@ -74,7 +74,7 @@ const jsonLd = [
     {jsonLd.map((j) => <script type="application/ld+json" set:html={JSON.stringify(j)} />)}
     <script is:inline>
       // Elemento compartido entre páginas (View Transitions). Va en el <head> porque "pagereveal" ocurre antes de
-      // que corran los demás scripts. Al tocar un enlace con [data-vt] (miniatura, título) ese elemento "viaja" a la
+      // que corran los demás scripts. Al tocar un enlace con [data-vt] (miniatura de Pokémon) esa imagen "viaja" a la
       // página nueva, donde el elemento con el mismo data-vt toma su lugar; al volver pasa lo mismo al revés.
       (function () {
         var KEY = "vt";

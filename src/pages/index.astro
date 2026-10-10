@@ -31,7 +31,7 @@ const floaters = [
           <a href={`/${s.slug}/`} class="card" style={`--c: ${s.color}`}>
             <Image src={artwork(s.art)} alt="" width={160} height={160} format="webp" loading={i < 2 ? 'eager' : 'lazy'} />
             <div>
-              <h2 data-vt={`sec-${s.slug}`}>{s.title}</h2>
+              <h2>{s.title}</h2>
               <p>{s.desc}</p>
             </div>
           </a>

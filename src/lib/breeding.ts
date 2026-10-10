@@ -25,14 +25,25 @@ export const modeOf = (male: number): Mode => (male < 0 || male === 1 ? 'ditto' 
 /** Género fijo de la especie: sin género, solo macho o solo hembra; '' si puede ser ambos. */
 export const fixedGender = (male: number): Gender => (male < 0 ? 'N' : male === 1 ? 'M' : male === 0 ? 'F' : '');
 
-export function buildPlan(stats: Stat[], target: string, targetMale: number, partner: string, finalGender: Gender): Node {
+/**
+ * `targetStat`: el IV 31 que ya tiene el Pokémon del jugador con el que empieza la crianza (la hembra a criar, o el
+ * macho/sin género si cría con Ditto). Ese IV lo aporta solo él: en la línea principal nunca pasa al otro padre, así
+ * que no hacen falta más Pokémon base con ese IV, y los demás se reparten 16/8/4/2/1.
+ */
+export function buildPlan(stats: Stat[], target: string, targetMale: number, partner: string, finalGender: Gender, targetStat?: Stat): Node {
   const mode = modeOf(targetMale);
+  const main = targetStat && stats.includes(targetStat) ? targetStat : undefined;
   const make = (set: Stat[], species: string, gender: Gender, item?: Stat): Node => {
     const node: Node = { id: '', stats: set, species, gender, item };
     // Ditto no se puede criar: si hace falta con varios 31 hay que atraparlo así
     if (set.length === 1 || species === 'ditto') return node;
-    const a = set[set.length - 2]; // IV que solo trae la hembra
-    const b = set[set.length - 1]; // IV que solo trae el macho
+    let a = set[set.length - 2]; // IV que solo trae la hembra
+    let b = set[set.length - 1]; // IV que solo trae el macho
+    if (species === target && main && set.includes(main)) {
+      // línea principal: el IV del Pokémon del jugador se queda en su lado (hembra, o el que no es Ditto)
+      const other = set.filter((s) => s !== main).at(-1)!;
+      [a, b] = mode === 'pair' ? [main, other] : [other, main];
+    }
     const left = set.filter((s) => s !== b);
     const right = set.filter((s) => s !== a);
     const female = mode === 'ditto' && species === target ? ['ditto', 'N'] : [species, 'F'];
@@ -41,15 +52,33 @@ export function buildPlan(stats: Stat[], target: string, targetMale: number, par
     return node;
   };
   const root = make(stats, target, fixedGender(targetMale) || finalGender);
-  // nombres por nivel, de izquierda a derecha
+  // nombres por nivel en el orden en que se ven en el lienzo (la hembra va primero: izquierda / arriba),
+  // así la línea del Pokémon del jugador y el Paso 1 quedan a la izquierda y los pasos se leen como un libro
   const count: Record<number, number> = {};
   const name = (n: Node) => {
-    n.parents?.forEach(name);
+    if (n.parents) visualOrder(n.parents).forEach(name);
     n.id = `N${n.stats.length}-${(count[n.stats.length] = (count[n.stats.length] ?? 0) + 1)}`;
   };
   name(root);
+  // el Paso 1 es el cruce del Pokémon del jugador (el primero de la línea principal), aunque en el mapa quede a la derecha
+  const lvl2 = flatten(root).filter((n) => n.stats.length === 2 && n.parents);
+  const first = lvl2.find((n) => n.species === target);
+  if (first) {
+    const k = Number(first.id.split('-')[1]);
+    for (const n of lvl2) {
+      const i = Number(n.id.split('-')[1]);
+      if (i < k) n.id = `N2-${i + 1}`;
+    }
+    first.id = 'N2-1';
+  }
   return root;
 }
+
+/**
+ * Orden en que se dibujan los padres: la hembra primero (así la línea del Pokémon del jugador queda a la izquierda),
+ * salvo en las parejas de Pokémon base, donde va macho a la izquierda y hembra a la derecha, como en el panel del paso.
+ */
+export const visualOrder = ([f, m]: [Node, Node]): Node[] => (!f.parents && !m.parents ? [m, f] : [f, m]);
 
 /** Todos los nodos, de los primeros pasos (capturas) al último (el objetivo). */
 export function flatten(root: Node): Node[] {
@@ -129,7 +158,8 @@ export function fitInventory(root: Node, target: string, strategy: Strategy, inv
     if (!ok) (missing[s] ??= { m: 0, f: 0, n: 0 })[k]++;
   };
   const avail = (leaf: Node, g: 'M' | 'F') => (rem[leaf.stats[0]]![g === 'M' ? 'm' : 'f'] > 0 ? 1 : 0);
-  const base = flatten(root).filter((n) => !n.parents && n.stats.length === 1);
+  // el Pokémon base de la especie objetivo es el del jugador (el que va a criar): ese ya lo tiene
+  const base = flatten(root).filter((n) => !n.parents && n.stats.length === 1 && n.species !== target);
   const pairs = flatten(root).filter((n) => n.parents && flexiblePair(n, target, strategy));
   const inPair = new Set(pairs.flatMap((n) => n.parents!.map((p) => p.id)));
   // primero los de género fijo (línea del objetivo, modo 'safe'), luego los flexibles
@@ -174,7 +204,7 @@ export function planGenders(
       for (const c of [f, m]) if (c.parents && o.both(c.species)) paid.add(c.id);
       continue;
     }
-    // ahorro: el primero que se cría sale al azar; al hermano se le elige el género contrario
+    // ahorro: el primero que se cría (el de la izquierda / arriba) sale al azar; al hermano se le elige el contrario
     random.add(f.id);
     f.gender = o.results[f.id] ?? '';
     m.gender = opposite(o.results[f.id]);
@@ -206,16 +236,17 @@ export function bestOrder(stats: Stat[], plan: (order: Stat[]) => Node, missing:
 }
 
 // ---------- posiciones en el lienzo ----------
-// 'tree': pirámide invertida (1x31 arriba, objetivo abajo), macho a la izquierda y hembra a la derecha.
-// 'bracket': esquema de llaves (1x31 a la izquierda, objetivo a la derecha), macho arriba y hembra abajo.
+// 'tree': pirámide invertida (1x31 arriba, objetivo abajo), hembra a la izquierda y macho a la derecha: la línea del
+// Pokémon del jugador queda a la izquierda y los pasos van de izquierda a derecha.
+// 'bracket': esquema de llaves (1x31 a la izquierda, objetivo a la derecha), hembra arriba y macho abajo.
 export type View = 'tree' | 'bracket';
 
 export function layout(root: Node, spread: number, depth: number, view: View = 'tree') {
   const pos = new Map<string, { x: number; y: number }>();
   let leaf = 0;
   const place = (n: Node): number => {
-    // parents = [hembra, macho]: el macho va primero (izquierda / arriba)
-    const along = n.parents ? [...n.parents].reverse().map(place).reduce((a, b) => a + b) / 2 : leaf++ * spread;
+    // parents = [hembra, macho]: la hembra va primero (izquierda / arriba)
+    const along = n.parents ? visualOrder(n.parents).map(place).reduce((a, b) => a + b) / 2 : leaf++ * spread;
     const level = (n.stats.length - 1) * depth;
     pos.set(n.id, view === 'tree' ? { x: along, y: level } : { x: level, y: along });
     return along;

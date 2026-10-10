@@ -46,9 +46,26 @@ assert.equal(flatten(after.root).find((n) => n.id === rand)!.gender, 'M');
 const fixedFit = fitInventory(plan([...STATS]), 'ralts', 'safe', { hp: { m: 16, f: 0 } });
 const flexFit = fitInventory(plan([...STATS]), 'ralts', 'save', { hp: { m: 16, f: 0 } });
 assert.ok(flexFit.total < fixedFit.total);
-// la Ralts base siempre es hembra (línea del objetivo)
+// la Ralts base es la del jugador: hembra, y no cuenta como faltante en el inventario
 const raltsLeaf = flatten(plan([...STATS])).find((n) => !n.parents && n.species === 'ralts')!;
-assert.equal(flexFit.gender.get(raltsLeaf.id), 'F');
+assert.equal(raltsLeaf.gender, 'F');
+assert.ok(!flexFit.gender.has(raltsLeaf.id));
+
+// el IV de la hembra del jugador lo aporta solo ella (×1); los demás se reparten 16/8/4/2/1
+{
+  const withAtk = buildPlan([...STATS], 'ralts', 0.5, 'slugma', 'F', 'attack');
+  const count: Record<string, number> = {};
+  for (const n of flatten(withAtk)) if (!n.parents) count[n.stats[0]] = (count[n.stats[0]] ?? 0) + 1;
+  assert.equal(count.attack, 1);
+  assert.deepEqual(Object.values(count).sort((x, y) => y - x), [16, 8, 4, 2, 1, 1]);
+  // el Paso 1 es el cruce de la Ralts del jugador (con su IV) y un Slugma
+  const [step1] = flatten(withAtk).filter((n) => n.parents);
+  assert.equal(step1.id, 'N2-1');
+  assert.equal(step1.species, 'ralts');
+  assert.deepEqual(step1.parents![0].stats, ['attack']);
+  // y sigue siendo una pirámide válida
+  for (const n of flatten(withAtk)) if (n.parents) assert.deepEqual(new Set([...n.parents[0].stats, ...n.parents[1].stats]), new Set(n.stats));
+}
 
 // sin género (Magnemite): cría con Ditto, sin pagar géneros
 const mag = buildPlan(['hp', 'speed'], 'magnemite', -1, '', '');
@@ -68,10 +85,26 @@ console.log('ok');
   assert.equal(pos.get('N6-1')!.y, 1000);
   const [f, m] = ralts.parents!;
   assert.equal(pos.get('N6-1')!.x, (pos.get(f.id)!.x + pos.get(m.id)!.x) / 2);
-  // macho a la izquierda de la hembra; en llaves, macho arriba y el objetivo a la derecha
-  assert.ok(pos.get(m.id)!.x < pos.get(f.id)!.x);
+  // espejo: hembra a la izquierda del macho; en llaves, hembra arriba y el objetivo a la derecha
+  assert.ok(pos.get(f.id)!.x < pos.get(m.id)!.x);
   const br = layout(ralts, 100, 200, 'bracket');
-  assert.ok(br.get(m.id)!.y < br.get(f.id)!.y);
+  assert.ok(br.get(f.id)!.y < br.get(m.id)!.y);
   assert.equal(br.get('N6-1')!.x, 1000);
+  // en las parejas de Pokémon base, macho a la izquierda y hembra a la derecha (como en el panel); en llaves, macho arriba
+  for (const n of flatten(ralts).filter((x) => x.stats.length === 2)) {
+    const [bf, bm] = n.parents!;
+    assert.ok(pos.get(bm.id)!.x < pos.get(bf.id)!.x);
+    assert.ok(br.get(bm.id)!.y < br.get(bf.id)!.y);
+  }
+  // el Paso 1 (primera crianza) queda a la izquierda de todos los de su nivel; en llaves, arriba
+  // el Paso 1 (la línea de la hembra) queda en el extremo izquierdo y todos van de izquierda a derecha / arriba hacia abajo
+  const rest = flatten(ralts).filter((n) => n.stats.length === 2);
+  assert.equal(rest[0].species, 'ralts');
+  for (let i = 1; i < rest.length; i++) {
+    assert.ok(pos.get(rest[i - 1].id)!.x < pos.get(rest[i].id)!.x);
+    assert.ok(br.get(rest[i - 1].id)!.y < br.get(rest[i].id)!.y);
+  }
+  // en ahorro, el huevo al azar se cría antes que el hermano que espera su resultado
+  for (const [paidId, randomId] of save.g.waitsFor) assert.ok(Number(randomId.split('-')[1]) < Number(paidId.split('-')[1]));
   console.log('ok reparto y lienzo');
 }

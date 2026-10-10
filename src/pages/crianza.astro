@@ -19,13 +19,13 @@ for (const p of all) {
   if (!p.egg.includes('undiscovered') && !familyEgg.has(root)) familyEgg.set(root, p.egg);
 }
 const bucketRank = ['common', 'uncommon', 'rare', 'ultra-rare'];
-// Qué tan fácil es conseguirlo: primero la rareza (Común > Poco común…), luego el ratio de captura (pesa mucho)
-// y después cuánto aparece (peso de sus spawns de esa rareza × biomas donde sale).
+// Qué tan fácil es conseguirlo, en este orden: rareza (Común > Poco común…), ratio de captura (el más alto primero)
+// y, solo para desempatar, cuánto aparece (peso de sus spawns de esa rareza × biomas donde sale).
 const easy = (p: (typeof all)[number]) => {
   const tier = Math.min(...p.spawns.map((s) => bucketRank.indexOf(s.bucket)).filter((i) => i >= 0));
   if (!Number.isFinite(tier)) return 0;
   const reach = p.spawns.filter((s) => s.bucket === bucketRank[tier]).reduce((t, s) => t + s.w * s.biomes.length, 0);
-  return (bucketRank.length - tier) * 100 + (p.catchRate / 255) ** 2 * Math.log1p(reach);
+  return (bucketRank.length - tier) * 1e6 + p.catchRate * 1e3 + Math.min(999, Math.log1p(reach) * 100);
 };
 const species = all.map((p) => {
   const buckets = p.spawns.map((s) => s.bucket).filter((b) => bucketRank.includes(b));
@@ -59,7 +59,7 @@ const clientData = { recommended, species, stats: STAT_INFO, egg: EGG, buckets: 
 ---
 
 <Base breadcrumbs={[{ name: 'Crianza 6x31', path: '/crianza/' }]} title="Crianza 6x31: planificador de IVs perfectos paso a paso" description="Planificador de crianza 6x31 para el servidor Diosesmon: pirámide visual paso a paso, pareja recomendada, objetos Recios y costo aproximado.">
-  <h1 data-vt="sec-crianza" data-vt-hero>Crianza 6x31</h1>
+  <h1 class="rise">Crianza 6x31</h1>
   <p class="intro">
     Elige el Pokémon, los IVs que quieres y los Pokémon que ya tienes: armamos la pirámide paso a paso, con lo que lleva cada padre y
     cuánto cuesta. Tu progreso se guarda solo en este navegador.
@@ -102,9 +102,10 @@ const clientData = { recommended, species, stats: STAT_INFO, egg: EGG, buckets: 
 
     <div class="panel" id="p-inv" hidden>
       <h2><span class="n">4</span> Tus Pokémon con 1x31</h2>
+      <div class="starter" id="starter"></div>
       <p class="hint">
-        Cada Pokémon de la base necesita <strong>31 en un solo IV</strong>. Anota cuántos machos y hembras tienes de cada uno: el IV del que
-        más tengas va arriba (el que más se usa). Puedes cambiar el orden con las flechas.
+        Para el resto de la base: cada Pokémon necesita <strong>31 en un solo IV</strong>. Anota cuántos machos y hembras tienes de cada
+        uno: el IV del que más tengas va arriba (el que más se usa). Puedes cambiar el orden con las flechas.
       </p>
       <button type="button" id="auto" class="auto">Asignar automáticamente</button>
       <div id="inv" class="inv"></div>
@@ -271,9 +272,10 @@ const clientData = { recommended, species, stats: STAT_INFO, egg: EGG, buckets: 
     results: Record<string, 'M' | 'F'>; // lo que salió en los huevos al azar
     done: string[];
     view: View; // pirámide o llaves
+    main: Stat | ''; // IV 31 del Pokémon del jugador con el que empieza la crianza
   }
   const KEY = 'crianza-v1';
-  const blank = (): State => ({ v: 2, target: '', stats: [...STATS], order: [...STATS], manual: false, inv: {}, partner: '', final: '', strategy: 'save', results: {}, done: [], view: 'tree' });
+  const blank = (): State => ({ v: 2, target: '', stats: [...STATS], order: [...STATS], manual: false, inv: {}, partner: '', final: '', strategy: 'save', results: {}, done: [], view: 'tree', main: '' });
   let state = blank();
   const count = (v: unknown) => Math.max(0, Math.min(999, Math.floor(Number(v) || 0)));
 
@@ -299,6 +301,7 @@ const clientData = { recommended, species, stats: STAT_INFO, egg: EGG, buckets: 
         Object.entries(raw.results ?? {}).filter(([k, v]) => /^N\d-\d+$/.test(k) && (v === 'M' || v === 'F')),
       ) as State['results'],
       view: raw.view === 'bracket' ? 'bracket' : 'tree',
+      main: STATS.includes(raw.main) ? raw.main : '',
       done: Array.isArray(raw.done) ? raw.done.filter((d: unknown) => typeof d === 'string' && /^N\d-\d+$/.test(d)) : [],
     };
   }
@@ -375,9 +378,11 @@ const clientData = { recommended, species, stats: STAT_INFO, egg: EGG, buckets: 
   let selected = ''; // id del paso abierto ('' = preparación)
 
   const fitOf = (root: Node) => fitInventory(root, state.target, state.strategy, state.inv);
+  /** IV del Pokémon del jugador (si no lo eligió, el primero de los que quiere). */
+  const mainOf = () => (state.main && state.stats.includes(state.main) ? state.main : state.stats[0]);
   const planWith = (order: Stat[]) => {
     const t = bySlug.get(state.target)!;
-    return buildPlan(order, t.slug, t.male, state.partner, state.final);
+    return buildPlan(order, t.slug, t.male, state.partner, state.final, mainOf());
   };
 
   // ---------- pintar ----------
@@ -457,7 +462,15 @@ const clientData = { recommended, species, stats: STAT_INFO, egg: EGG, buckets: 
     }
 
     // 4. orden de IVs según lo que tiene el jugador
-    state.order = state.manual ? state.stats.slice().sort((a, b) => state.order.indexOf(a) - state.order.indexOf(b)) : bestOrder(state.stats, planWith, (r) => fitOf(r).total, state.inv);
+    // el IV del Pokémon del jugador va primero (es solo suyo); el resto se ordena 16/8/4/2/1
+    const main = mainOf();
+    const rest = state.stats.filter((s) => s !== main);
+    state.order = [
+      main,
+      ...(state.manual
+        ? rest.sort((a, b) => state.order.indexOf(a) - state.order.indexOf(b))
+        : bestOrder(rest, (o) => planWith([main, ...o]), (r) => fitOf(r).total, state.inv)),
+    ];
     plan = planWith(state.order);
     invFit = fitOf(plan);
     gplan = planGenders(plan, { target: t.slug, strategy: state.strategy, results: state.results, final: state.final, both: bothGenders, fit: invFit });
@@ -496,6 +509,8 @@ const clientData = { recommended, species, stats: STAT_INFO, egg: EGG, buckets: 
     const ids = new Set(steps.map((n) => n.id));
     state.done = state.done.filter((d) => ids.has(d));
     if (selected && !ids.has(selected)) selected = '';
+    // al abrir o cambiar el plan se empieza directo en el Paso 1 (la preparación sigue a un clic con «Anterior»)
+    if (fit && !selected) selected = steps[0]?.id ?? '';
     renderSummary(t);
     renderBoard(fit);
     save();
@@ -515,7 +530,22 @@ const clientData = { recommended, species, stats: STAT_INFO, egg: EGG, buckets: 
 
   function renderInventory(t: Sp) {
     const flexible = state.strategy === 'save' && modeOf(t.male) === 'pair';
-    $('inv').innerHTML = state.order
+    const main = mainOf();
+    const who = modeOf(t.male) === 'pair' ? `tu ${t.es} ${gs.f}` : `tu ${t.es}`;
+    $('starter').innerHTML = `
+      <img src="${thumb(t.slug)}" alt="" width="64" height="64" />
+      <div>
+        <p class="q">¿En qué IV tiene 31 <strong>${who}</strong>, el que vas a criar?</p>
+        <div class="opts">${state.stats
+          .map((s) => {
+            const i = statInfo.get(s)!;
+            return `<label class="opt" style="--c:${i.color}"><input type="radio" name="main" value="${s}" ${s === main ? 'checked' : ''} /><span><img src="${i.icon}" alt="" width="18" height="18" />${i.name}</span></label>`;
+          })
+          .join('')}</div>
+        <p class="hint">${state.main ? '' : `${icon('info')} Elige el suyo: por ahora suponemos ${statInfo.get(main)!.name}. `}Ese IV lo aporta solo ${who}: no necesitas más Pokémon con él. El Paso 1 es su cruce.</p>
+      </div>`;
+    const restOrder = state.order.slice(1);
+    $('inv').innerHTML = restOrder
       .map((s, i) => {
         const need = invFit.need[s] ?? { m: 0, f: 0, n: 0 };
         const miss = invFit.missing[s] ?? { m: 0, f: 0, n: 0 };
@@ -535,7 +565,7 @@ const clientData = { recommended, species, stats: STAT_INFO, egg: EGG, buckets: 
         return `<div class="inv-row" style="--c:${info.color};--ink:${info.ink}">
           <span class="move">
             <button type="button" data-move="${s}" data-dir="-1" ${i === 0 ? 'disabled' : ''} aria-label="Subir ${info.name}">${icon('up', 14)}</button>
-            <button type="button" data-move="${s}" data-dir="1" ${i === state.order.length - 1 ? 'disabled' : ''} aria-label="Bajar ${info.name}">${icon('down', 14)}</button>
+            <button type="button" data-move="${s}" data-dir="1" ${i === restOrder.length - 1 ? 'disabled' : ''} aria-label="Bajar ${info.name}">${icon('down', 14)}</button>
           </span>
           <span class="inv-stat"><img src="${info.icon}" alt="" width="24" height="24" /><strong>${info.name}</strong><span class="x16">×${total}</span></span>
           <span class="inv-need">Necesitas <strong>${split || '0'}</strong>${flexible && need.m && need.f ? ' <small>(o al revés)</small>' : ''}</span>
@@ -546,12 +576,9 @@ const clientData = { recommended, species, stats: STAT_INFO, egg: EGG, buckets: 
         </div>`;
       })
       .join('');
-    const targetLeaf = flatten(plan).find((n) => !n.parents && n.species === t.slug && n.stats.length === 1);
     $('inv-note').innerHTML = [
       flexible ? `${icon('info')} En cada cruce de la base basta <strong>un macho y una hembra</strong>: repartimos tus Pokémon como mejor encajen.` : '',
-      targetLeaf
-        ? `${icon('target')} Una de las ${GENDER_WORD[targetLeaf.gender]}s con 31 en <strong>${statInfo.get(targetLeaf.stats[0])!.name}</strong> tiene que ser <strong>${nameOf(t.slug)}</strong>; las demás, ${nameOf(state.partner)}.`
-        : '',
+      modeOf(t.male) === 'pair' ? `${icon('target')} Todos estos son ${nameOf(state.partner)} (la pareja); solo ${who} es de su especie.` : '',
     ]
       .filter(Boolean)
       .map((x) => `<span>${x}</span>`)
@@ -688,7 +715,11 @@ const clientData = { recommended, species, stats: STAT_INFO, egg: EGG, buckets: 
     renderDetail();
     highlight();
     progress();
-    if (fit) requestAnimationFrame(() => focus(nodes.map((n) => n.id), false, 1));
+    if (fit) {
+      // enfocado en el paso abierto, no en toda la pirámide (que de lejos asusta)
+      const n = steps.find((s) => s.id === selected);
+      requestAnimationFrame(() => focus(n ? [n.id, ...n.parents!.map((p) => p.id)] : nodes.map((x) => x.id), false, n ? 1.1 : 1));
+    }
   }
 
   const stepIndex = () => (selected ? steps.findIndex((n) => n.id === selected) + 1 : 0); // 0 = preparación
@@ -762,6 +793,7 @@ const clientData = { recommended, species, stats: STAT_INFO, egg: EGG, buckets: 
       $('detail').innerHTML = `
         <h3>${icon('box')} Preparación</h3>
         <p class="hint">Antes de criar reúne los Pokémon de la fila de arriba (1x31). Cada uno lleva su Recio al criar.</p>
+        <p class="mine">${icon('target')} Tu ${nameOf(state.target)} con 31 en <strong>${statInfo.get(mainOf())!.name}</strong> (ya lo tienes)</p>
         <ul class="prep">${state.order
           .map((s) => {
             const need = invFit.need[s];
@@ -944,10 +976,20 @@ const clientData = { recommended, species, stats: STAT_INFO, egg: EGG, buckets: 
     const s = b.dataset.move as Stat;
     const i = state.order.indexOf(s);
     const j = i + Number(b.dataset.dir);
+    if (j < 1) return; // el primero es el IV del Pokémon del jugador
     [state.order[i], state.order[j]] = [state.order[j], state.order[i]];
     state.manual = true;
     state.done = [];
     render();
+  });
+  $('starter').addEventListener('change', (e) => {
+    const v = (e.target as HTMLInputElement).value as Stat;
+    if (state.done.length && !confirm('Cambiar el IV de tu Pokémon rehace la pirámide y borra el progreso marcado. ¿Continuar?')) return render();
+    state.main = v;
+    state.done = [];
+    state.results = {};
+    selected = '';
+    render(true);
   });
   $('auto').addEventListener('click', () => {
     if (state.done.length && !confirm('Reordenar rehace la pirámide y borra el progreso marcado. ¿Continuar?')) return;
@@ -2308,5 +2350,69 @@ const clientData = { recommended, species, stats: STAT_INFO, egg: EGG, buckets: 
   }
   .caret {
     display: grid;
+  }
+
+  /* Pokémon del jugador con el que empieza la crianza */
+  .starter {
+    display: flex;
+    gap: 12px;
+    align-items: flex-start;
+    margin-bottom: 14px;
+    padding: 12px;
+    border-radius: 14px;
+    background: var(--bg);
+    box-shadow: var(--neu-in);
+  }
+  .starter :global(> img) {
+    flex: none;
+  }
+  .starter :global(.q) {
+    margin: 0 0 8px;
+    font-weight: 600;
+  }
+  .starter :global(.opts) {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  .starter :global(.opt) {
+    position: relative;
+  }
+  .starter :global(.opt input) {
+    position: absolute;
+    opacity: 0;
+  }
+  .starter :global(.opt span) {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 6px 12px;
+    border-radius: 999px;
+    border: 2px solid color-mix(in srgb, var(--c) 45%, transparent);
+    background: var(--surface);
+    box-shadow: var(--neu-sm);
+    font-size: 0.88rem;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .starter :global(.opt input:focus-visible + span) {
+    outline: 2px solid var(--text);
+  }
+  .starter :global(.opt span img) {
+    image-rendering: pixelated;
+  }
+  .starter :global(.opt input:checked + span) {
+    background: var(--c);
+    border-color: var(--c);
+    color: #111;
+  }
+  .starter :global(.hint) {
+    margin-bottom: 0;
+  }
+  .detail :global(.mine) {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+    font-size: 0.88rem;
   }
 </style>
