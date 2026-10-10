@@ -475,6 +475,10 @@ const interactions = (interactionData as Interaction[]).filter((i) => i.slug ===
   .evo {
     margin-bottom: 28px;
   }
+  .evo :global(.steps) {
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 8px 24px;
+  }
   .megas {
     display: grid;
     gap: 12px;

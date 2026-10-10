@@ -7,8 +7,11 @@ const fold = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCa
 const cards = families.map((root) => {
   const members = familyMembers(root);
   const tags = new Set(members.flatMap((m) => childrenOf(m).flatMap((c) => c.ways.flatMap(methodTags))));
+  // familias con una etapa de más de 3 Pokémon (ej. Eevee) ocupan todo el ancho; el resto, una columna
+  const wide = members.some((m) => childrenOf(m).length > 3);
   return {
     root,
+    wide,
     names: fold(members.map((m) => `${bySlug.get(m)!.es} ${bySlug.get(m)!.en} ${bySlug.get(m)!.id}`).join(' ')),
     tags: [...tags].join(' '),
   };
@@ -41,7 +44,7 @@ const cards = families.map((root) => {
   <ul class="families">
     {
       cards.map((c) => (
-        <li data-names={c.names} data-tags={c.tags}>
+        <li data-names={c.names} data-tags={c.tags} class:list={{ wide: c.wide }}>
           <EvoTree slug={c.root} />
         </li>
       ))
@@ -146,10 +149,30 @@ const cards = families.map((root) => {
     margin: 0;
     padding: 0;
     display: grid;
-    gap: 14px;
+    gap: 10px;
+  }
+  @media (min-width: 1000px) {
+    .families {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+    .families > li.wide {
+      grid-column: 1 / -1;
+    }
+  }
+  @media (min-width: 640px) and (max-width: 999px) {
+    .families {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+    .families > li.wide {
+      grid-column: 1 / -1;
+    }
+  }
+  .families > li.wide :global(.steps) {
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
   }
   .families > li {
-    padding: 14px;
+    min-width: 0;
+    padding: 12px;
     background: color-mix(in srgb, var(--surface) 50%, transparent);
     border: 1px solid var(--border);
     border-radius: var(--radius);

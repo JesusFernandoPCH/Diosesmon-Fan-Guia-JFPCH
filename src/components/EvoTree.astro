@@ -1,82 +1,120 @@
 ---
-// Árbol evolutivo: tarjeta del Pokémon y, a su lado (abajo en móvil), cada evolución con sus requisitos.
+// Familia evolutiva: fila de Pokémon por etapa (con flecha entre etapas) y debajo, un paso por línea con su requisito.
 import EvoWay from './EvoWay.astro';
 import TypeChip from './TypeChip.astro';
 import Icon from './Icon.astro';
 import { biasRegion } from '../data/labels';
-import { bySlug, childrenOf, isBias } from '../lib/evo';
+import { bySlug, childrenOf, isBias, type EvoGroup } from '../lib/evo';
 
 interface Props {
   slug: string;
   current?: string; // resalta el Pokémon de la ficha actual
 }
 const { slug, current } = Astro.props;
-const p = bySlug.get(slug)!;
-const children = childrenOf(slug);
 const SHOWN = 3; // formas de evolucionar visibles antes de "ver más"
+
+const stages: string[][] = [];
+const steps: { from: string; to: string; ways: EvoGroup[] }[] = [];
+for (let level = [slug]; level.length; ) {
+  stages.push(level);
+  const next: string[] = [];
+  for (const from of level)
+    for (const c of childrenOf(from)) {
+      steps.push({ from, to: c.to, ways: c.ways });
+      next.push(c.to);
+    }
+  level = next;
+}
+const es = (s: string) => bySlug.get(s)!.es;
 ---
 
-<div class="node">
-  <a href={`/pokemon/${p.slug}/`} class:list={['mon', { current: current === p.slug }]}>
-    <img src={`/img/thumb/${p.id}.webp`} alt="" width="64" height="64" loading="lazy" data-vt={`mon-${p.id}`} />
-    <span class="name">{p.es}</span>
-    <span class="types">{p.types.map((t) => <TypeChip type={t} small />)}</span>
-  </a>
-  {
-    children.length > 0 && (
-      <div class="branches">
-        {children.map(({ to, ways }) => {
-          const normal = ways.filter((w) => !isBias(w));
-          const bias = ways.filter(isBias);
-          return (
-          <div class="branch">
-            <div class="arrow">
-              {normal.slice(0, SHOWN).map((w) => (
-                <EvoWay way={w} friendshipBase={p.friendship} />
-              ))}
-              {normal.length > SHOWN && (
-                <details>
-                  <summary>Ver {normal.length - SHOWN} formas más</summary>
-                  {normal.slice(SHOWN).map((w) => (
-                    <EvoWay way={w} friendshipBase={p.friendship} />
-                  ))}
-                </details>
-              )}
-              {bias.length > 0 && (
-                <details class="bias">
-                  <summary><Icon name="compass" size={16} /> Con tendencia de {biasRegion(bias[0].fromForm!)} ({bias.length})</summary>
-                  <p>
-                    Algunos {p.es} salvajes aparecen con <strong>tendencia de {biasRegion(bias[0].fromForm!)}</strong> según
-                    el bioma donde nacen (lo verás en “Dónde aparece”). Esos evolucionan con estas reglas:
-                  </p>
-                  {bias.map((w) => (
-                    <EvoWay way={w} friendshipBase={p.friendship} />
-                  ))}
-                </details>
-              )}
-            </div>
-            <Astro.self slug={to} current={current} />
+<div class="fam">
+  <div class="stages">
+    {
+      stages.map((stage, i) => (
+        <>
+          {i > 0 && <span class="next" aria-hidden="true"><Icon name="right" size={16} /></span>}
+          <div class:list={['stage', { many: stage.length > 3 }]}>
+            {stage.map((s) => {
+              const p = bySlug.get(s)!;
+              return (
+                <a href={`/pokemon/${p.slug}/`} class:list={['mon', { current: current === p.slug }]}>
+                  <img src={`/img/thumb/${p.id}.webp`} alt="" width="48" height="48" loading="lazy" data-vt={`mon-${p.id}`} />
+                  <span class="name">{p.es}</span>
+                  <span class="types">{p.types.map((t) => <TypeChip type={t} small />)}</span>
+                </a>
+              );
+            })}
           </div>
-          );
-        })}
-      </div>
-    )
-  }
+        </>
+      ))
+    }
+  </div>
+
+  <ul class="steps">
+    {
+      steps.map(({ from, to, ways }) => {
+        const normal = ways.filter((w) => !isBias(w));
+        const bias = ways.filter(isBias);
+        const friendshipBase = bySlug.get(from)!.friendship;
+        return (
+          <li class="step">
+            <span class="pair">{es(from)} <Icon name="right" size={13} /> {es(to)}</span>
+            {normal.slice(0, SHOWN).map((w) => <EvoWay way={w} friendshipBase={friendshipBase} />)}
+            {normal.length > SHOWN && (
+              <details>
+                <summary>Ver {normal.length - SHOWN} formas más</summary>
+                {normal.slice(SHOWN).map((w) => <EvoWay way={w} friendshipBase={friendshipBase} />)}
+              </details>
+            )}
+            {bias.length > 0 && (
+              <details class="bias">
+                <summary><Icon name="compass" size={16} /> Con tendencia de {biasRegion(bias[0].fromForm!)} ({bias.length})</summary>
+                <p>
+                  Algunos {es(from)} salvajes aparecen con <strong>tendencia de {biasRegion(bias[0].fromForm!)}</strong> según
+                  el bioma donde nacen (lo verás en “Dónde aparece”). Esos evolucionan con estas reglas:
+                </p>
+                {bias.map((w) => <EvoWay way={w} friendshipBase={friendshipBase} />)}
+              </details>
+            )}
+          </li>
+        );
+      })
+    }
+  </ul>
 </div>
 
 <style>
-  .node {
-    display: flex;
-    flex-direction: column;
+  .fam {
+    display: grid;
     gap: 10px;
+    align-content: start;
+  }
+  .stages {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    gap: 4px;
+  }
+  .stage {
+    display: grid;
+    gap: 6px;
+  }
+  .stage.many {
+    grid-template-columns: repeat(auto-fill, 84px);
+    max-width: 100%;
+  }
+  .next {
+    align-self: center;
+    color: var(--accent);
   }
   .mon {
-    align-self: flex-start;
     display: grid;
     justify-items: center;
+    align-content: start;
     gap: 2px;
-    width: 118px;
-    padding: 8px;
+    width: 84px;
+    padding: 6px 4px;
     border-radius: 12px;
     background: var(--surface);
     border: 1px solid var(--border);
@@ -87,50 +125,52 @@ const SHOWN = 3; // formas de evolucionar visibles antes de "ver más"
     box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 40%, transparent);
   }
   .mon img {
-    width: 64px;
-    height: 64px;
+    width: 48px;
+    height: 48px;
   }
   .name {
-    font: 600 0.9rem var(--font-title);
+    font: 600 0.82rem var(--font-title);
     text-align: center;
   }
   .types {
     display: flex;
-    gap: 3px;
-    flex-wrap: wrap;
-    justify-content: center;
-  }
-  .branches {
-    display: flex;
     flex-direction: column;
-    gap: 14px;
-    padding-left: 18px;
-    border-left: 2px solid var(--border);
+    align-items: center;
+    gap: 2px;
   }
-  .branch {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-  }
-  .arrow {
-    position: relative;
+
+  .steps {
+    list-style: none;
+    margin: 0;
+    padding: 8px 0 0;
     display: grid;
-    gap: 6px;
-    padding: 8px 10px;
-    border-radius: 10px;
-    background: color-mix(in srgb, var(--surface-2) 60%, transparent);
+    gap: 8px;
+    border-top: 1px solid var(--border);
   }
-  .arrow::before {
-    content: '↓';
-    position: absolute;
-    left: -16px;
-    top: 6px;
-    color: var(--accent);
-    font-weight: 700;
+  .step {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px 8px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
   }
-  .arrow > :global(.way + .way) {
-    padding-top: 8px;
+  .step:last-child {
+    padding-bottom: 0;
+    border-bottom: 0;
+  }
+  .pair {
+    white-space: nowrap;
+    font: 600 0.82rem var(--font-title);
+    color: var(--muted);
+  }
+  .step > :global(.way + .way) {
+    flex-basis: 100%;
+    padding-top: 4px;
     border-top: 1px dashed var(--border);
+  }
+  .step > details {
+    flex-basis: 100%;
   }
   details summary {
     cursor: pointer;
@@ -141,7 +181,6 @@ const SHOWN = 3; // formas de evolucionar visibles antes de "ver más"
     margin-top: 6px;
   }
   .bias {
-    margin-top: 4px;
     padding: 6px 8px;
     border-radius: 8px;
     border: 1px dashed var(--border);
@@ -150,34 +189,5 @@ const SHOWN = 3; // formas de evolucionar visibles antes de "ver más"
     margin: 6px 0;
     font-size: 0.8rem;
     color: var(--muted);
-  }
-
-  /* Escritorio: el árbol crece hacia la derecha */
-  @media (min-width: 1000px) {
-    .node {
-      flex-direction: row;
-      align-items: flex-start;
-    }
-    .branches {
-      padding-left: 0;
-      border-left: 0;
-    }
-    .branch {
-      flex-direction: row;
-      align-items: flex-start;
-    }
-    .arrow {
-      width: 260px;
-      margin-top: 18px;
-    }
-    .arrow::before {
-      content: '→';
-      left: auto;
-      right: -16px;
-      top: 8px;
-    }
-    .branch > :global(.node) {
-      margin-left: 8px;
-    }
   }
 </style>

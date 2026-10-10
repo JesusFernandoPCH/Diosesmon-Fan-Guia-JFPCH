@@ -22,6 +22,10 @@ const site = Astro.site ?? Astro.url;
 const canonical = new URL(Astro.url.pathname, site).href;
 const ogImage = new URL(image, site).href;
 const here = Astro.url.pathname;
+// Fondo: los Pokémon de las 6 secciones, tenues y quietos en los márgenes (x en %, y en vh, tamaño en px, giro en grados)
+const backdrop = sections.flatMap((s, i) => [
+  { id: s.art, x: i % 2 ? 90 : 3, y: 8 + i * 15, size: 110 + (i % 3) * 22, rot: i % 2 ? 8 : -8 },
+]);
 // Datos estructurados (schema.org) para que Google entienda qué es la web y muestre la ruta de migas
 const jsonLd = [
   here === '/' && {
@@ -73,9 +77,8 @@ const jsonLd = [
     <meta name="twitter:image" content={ogImage} />
     {jsonLd.map((j) => <script type="application/ld+json" set:html={JSON.stringify(j)} />)}
     <script is:inline>
-      // Elemento compartido entre páginas (View Transitions). Va en el <head> porque "pagereveal" ocurre antes de
-      // que corran los demás scripts. Al tocar un enlace con [data-vt] (miniatura de Pokémon) esa imagen "viaja" a la
-      // página nueva, donde el elemento con el mismo data-vt toma su lugar; al volver pasa lo mismo al revés.
+      // La miniatura con [data-vt] viaja a la página nueva (y de vuelta). Va en el <head> porque "pagereveal"
+      // ocurre antes que los demás scripts.
       (function () {
         var KEY = "vt";
         document.addEventListener("click", function (e) {
@@ -109,6 +112,9 @@ const jsonLd = [
   </head>
   <body>
     <a class="skip" href="#contenido">Saltar al contenido</a>
+    <div class="backdrop" aria-hidden="true">
+      {backdrop.map((b, i) => <img src={`/img/thumb/${b.id}.webp`} alt="" width={b.size} height={b.size} style={`left:${b.x}%;top:${b.y}vh;width:${b.size}px;height:${b.size}px;rotate:${b.rot}deg`} class={i > 3 ? 'wide' : undefined} />)}
+    </div>
     <header id="top">
       <a href="/" class="brand" aria-label="Guía Diosesmon, inicio">
         <span class="ball" aria-hidden="true"></span>
@@ -161,13 +167,13 @@ const jsonLd = [
     </footer>
 
     <script>
-      // ---------- carga: quita el brillo de cada imagen cuando termina de cargar ----------
+      // Carga: quita el brillo de cada imagen cuando termina de cargar
       const loaded = (img: HTMLImageElement) => img.classList.add('ld');
       document.addEventListener('load', (e) => e.target instanceof HTMLImageElement && loaded(e.target), true);
       document.addEventListener('error', (e) => e.target instanceof HTMLImageElement && loaded(e.target), true);
       document.querySelectorAll('img').forEach((img) => img.complete && loaded(img));
 
-      // ---------- header fijo que se compacta y botón "volver arriba" ----------
+      // Header fijo que se compacta y botón "volver arriba"
       const header = document.querySelector('header')!;
       const toTop = document.getElementById('to-top')!;
       const onScroll = () => {
@@ -178,7 +184,7 @@ const jsonLd = [
       onScroll();
       toTop.addEventListener('click', () => scrollTo({ top: 0 }));
 
-      // ---------- menú hamburguesa ----------
+      // Menú hamburguesa
       const burger = document.getElementById('burger')!;
       const menu = document.getElementById('mobile-menu')!;
       const setMenu = (open: boolean) => {
@@ -195,6 +201,27 @@ const jsonLd = [
 </html>
 
 <style>
+  /* Fondo decorativo: quieto, a baja opacidad y fuera del flujo; no recibe clics ni resta legibilidad */
+  .backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: -1;
+    overflow: hidden;
+    pointer-events: none;
+  }
+  .backdrop img {
+    position: absolute;
+    opacity: 0.07;
+    filter: grayscale(0.3);
+  }
+  @media (max-width: 900px) {
+    .backdrop img.wide {
+      display: none;
+    }
+    .backdrop img {
+      opacity: 0.05;
+    }
+  }
   .skip {
     position: absolute;
     left: -999px;
@@ -251,7 +278,7 @@ const jsonLd = [
     transform: rotate(360deg);
   }
 
-  /* ---------- dock con efecto lupa (como el de macOS) ---------- */
+  /* Dock con efecto lupa (como el de macOS) */
   .dock {
     display: none;
     align-items: center;
@@ -322,7 +349,7 @@ const jsonLd = [
     opacity: 1;
   }
 
-  /* ---------- menú hamburguesa (celular) ---------- */
+  /* Menú hamburguesa (celular) */
   .burger {
     display: grid;
     gap: 5px;
@@ -406,7 +433,7 @@ const jsonLd = [
     overflow: hidden;
   }
 
-  /* ---------- volver arriba ---------- */
+  /* Volver arriba */
   .to-top {
     display: grid;
     place-items: center;
