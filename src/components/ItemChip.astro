@@ -1,6 +1,6 @@
 ---
 // Objeto con icono; al pasar el mouse/tocar muestra para qué sirve y cómo conseguirlo.
-import { existsSync } from 'node:fs';
+import { inPublic } from '../lib/public';
 import Tip from './Tip.astro';
 import itemData from '../data/items.json';
 import type { Item } from '../data/types';
@@ -19,7 +19,7 @@ const item = (itemData as Record<string, Item>)[id] ?? CUSTOM_ITEMS[id] ?? { es:
 const how = obtainOf(id);
 const [ns, path] = id.split(':');
 const recipeFile = `/img/recipe/${ns}_${path}.webp`;
-const recipe = how.recipe && existsSync(`public${recipeFile}`) ? recipeFile : undefined;
+const recipe = how.recipe && inPublic(recipeFile) ? recipeFile : undefined;
 const ores = !!(how.ores && item.ores?.length);
 // solo Pokémon disponibles en el servidor
 const dropList = item.drops?.filter((d) => bySlug.has(d.slug)) ?? [];

@@ -1,5 +1,5 @@
 ---
-import { existsSync } from 'node:fs';
+import { inPublic } from '../lib/public';
 import Tip from './Tip.astro';
 import Icon from './Icon.astro';
 import { PLACES, label } from '../data/labels';
@@ -10,7 +10,7 @@ interface Props {
 }
 const { place, prefix = '' } = Astro.props;
 const name = label(PLACES, place);
-const img = existsSync(`public/img/place/${place}.webp`) ? `/img/place/${place}.webp` : undefined;
+const img = inPublic(`/img/place/${place}.webp`) ? `/img/place/${place}.webp` : undefined;
 ---
 
 {

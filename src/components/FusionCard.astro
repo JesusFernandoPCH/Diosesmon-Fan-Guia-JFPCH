@@ -1,6 +1,6 @@
 ---
 // Tarjeta de una fusión: imagen (o vista previa con los dos Pokémon), padres y, si se conocen, tipos, habilidades y estadísticas.
-import { existsSync } from 'node:fs';
+import { inPublic } from '../lib/public';
 import TypeChip from './TypeChip.astro';
 import Icon from './Icon.astro';
 import { bySlug } from '../lib/evo';
@@ -12,7 +12,7 @@ interface Props {
 const { f } = Astro.props;
 const parents = [bySlug.get(f.a)!, bySlug.get(f.b)!];
 // imagen que pone el usuario en public/img/fusion/<slug>.webp (o .png)
-const art = ['webp', 'png'].map((ext) => `/img/fusion/${f.slug}.${ext}`).find((src) => existsSync(`public${src}`));
+const art = ['webp', 'png'].map((ext) => `/img/fusion/${f.slug}.${ext}`).find((src) => inPublic(src));
 const STAT_SHORT = { hp: 'PS', attack: 'Atq', defence: 'Def', special_attack: 'At.Esp', special_defence: 'Def.Esp', speed: 'Vel' };
 const total = Object.values(f.stats).reduce((a, b) => a + b, 0);
 const pending = !f.types.length && !f.abilities.length && !f.hidden && !total;

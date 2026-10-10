@@ -1,0 +1,10 @@
+// Configuración del despliegue en Cloudflare Workers (sitio estático).
+{
+  "name": "diosesmon-fan-guia",
+  "compatibility_date": "2025-09-01",
+  "assets": {
+    "directory": "./dist",
+    // muestra nuestra página 404 personalizada (dist/404.html) cuando una página no existe
+    "not_found_handling": "404-page"
+  }
+}
