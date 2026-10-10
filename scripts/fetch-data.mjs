@@ -21,7 +21,7 @@ const DATA = join(COBBLEMON_DIR, 'data/cobblemon');
 
 if (FRESH) rmSync(CACHE, { recursive: true, force: true });
 
-// ---------- descargas con caché ----------
+// Descargas con caché
 async function cached(name, url, parse = JSON.parse) {
   const path = join(CACHE, name);
   if (!existsSync(path)) {
@@ -122,7 +122,7 @@ async function pokeapiNames() {
   };
 }
 
-// ---------- biomas: resuelve tags de Cobblemon/Minecraft a biomas vanilla ----------
+// Biomas: resuelve tags de Cobblemon/Minecraft a biomas vanilla
 // ponytail: solo biomas vanilla; los de otros mods (Terralith, BoP, Aether…) se ignoran. Añadir si el servidor los usa.
 const tagCache = new Map();
 async function resolveTag(id) {
@@ -155,7 +155,7 @@ async function resolveBiomes(ids = []) {
   return out;
 }
 
-// ---------- spawns ----------
+// Spawns
 const SPECIAL_PRESETS = new Set([
   'urban', 'treetop', 'foliage', 'derelict', 'redstone', 'lava', 'mansion', 'mansion_bedrooms', 'mansion_dining',
   'ocean_ruins', 'ocean_monument', 'trail_ruins', 'ruined_portal', 'pillager_outpost', 'illager_structures',
@@ -249,7 +249,7 @@ async function buildSpawns(biomeIndex) {
   return bySpecies;
 }
 
-// ---------- imágenes ----------
+// Imágenes
 async function downloadImages(ids) {
   const queue = ids.filter((id) => !existsSync(`public/img/thumb/${id}.webp`));
   if (!queue.length) return;
@@ -314,7 +314,7 @@ async function wikiImages(titles, dir, w, h, pixel = false) {
   }
 }
 
-// ---------- objetos: nombre, icono y cómo conseguirlos ----------
+// Objetos: nombre, icono y cómo conseguirlos
 // Mods con objetos propios: carpeta extraída del jar y ruta de sus texturas de objetos
 const ITEM_MODS = {
   cobblemon: { dir: COBBLEMON_DIR, tex: 'assets/cobblemon/textures/item' },
@@ -472,7 +472,7 @@ async function buildItems(ids, tools, cobbleLang, speciesFiles, esSpecies, craft
   return items;
 }
 
-// ---------- evoluciones ----------
+// Evoluciones
 function buildEvolutions(data, biomeIndex, resolveBiomesSync) {
   const all = [...(data.evolutions ?? []).map((e) => [null, e]), ...(data.forms ?? []).flatMap((f) => (f.evolutions ?? []).map((e) => [f.name, e]))];
   return all.map(([fromForm, e]) => {
@@ -496,7 +496,6 @@ function buildEvolutions(data, biomeIndex, resolveBiomesSync) {
   });
 }
 
-// ---------- main ----------
 await modJar('cobblemon', COBBLEMON_JAR, ['data/cobblemon', 'assets/cobblemon/lang', 'assets/cobblemon/textures/item']);
 await modJar('cobblemon-mega-showdown', MEGA_SHOWDOWN_JAR, ['data', 'assets/mega_showdown/lang', 'assets/mega_showdown/textures/item', 'assets/cobblemon/bedrock/pokemon/resolvers']);
 await modJar('navas-zamega', ZAMEGA_JAR, ['data', 'assets/cobblemon/lang', 'assets/zamega/textures/item', 'assets/cobblemon/bedrock/pokemon/resolvers']);
@@ -598,7 +597,7 @@ for (const p of pokemon) {
     }
   }
 }
-// ---------- interacciones (clic derecho al Pokémon con un objeto) ----------
+// Interacciones (clic derecho al Pokémon con un objeto)
 // tag del objeto que sostiene el jugador → objeto vanilla para el icono
 const TOOL_ITEM = { '#c:tools/brushes': 'minecraft:brush', '#c:fertilizers': 'minecraft:bone_meal', '#c:tools/shear': 'minecraft:shears' };
 const interactions = [];
@@ -629,7 +628,7 @@ for (const { name, data } of speciesFiles)
     interactions.push({ slug: name.split('/').pop(), tool: 'minecraft:shears', uses: 1, item: 'minecraft:white_wool', amount: '', cd: -1 }); // cd -1 = hasta que le crezca la lana
 for (const i of interactions) [i.tool, i.item].forEach((id) => itemIds.add(id));
 
-// ---------- megaevoluciones (Mega Showdown + ZA Megas) ----------
+// Megaevoluciones (Mega Showdown + ZA Megas)
 const speciesBySlug = new Map(speciesFiles.map((f) => [f.name.split('/').pop(), f.data]));
 // formas extra que los mods añaden a especies existentes (species_additions)
 const extraForms = new Map();
@@ -730,7 +729,7 @@ writeFileSync(
   }),
 );
 
-// ---------- imágenes ----------
+// Imágenes
 await downloadImages(pokemon.map((p) => p.id));
 const titleCase = (id) => id.split('_').map((w) => w[0].toUpperCase() + w.slice(1)).join(' ');
 await wikiImages(Object.fromEntries(biomes.map((b) => [b.id, titleCase(b.id)])), 'biome', 320, 180);

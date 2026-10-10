@@ -52,8 +52,7 @@ export function buildPlan(stats: Stat[], target: string, targetMale: number, par
     return node;
   };
   const root = make(stats, target, fixedGender(targetMale) || finalGender);
-  // nombres por nivel en el orden en que se ven en el lienzo (la hembra va primero: izquierda / arriba),
-  // así la línea del Pokémon del jugador y el Paso 1 quedan a la izquierda y los pasos se leen como un libro
+  // Nombres por nivel en el orden del lienzo (hembra primero), para que los pasos se lean de izquierda a derecha.
   const count: Record<number, number> = {};
   const name = (n: Node) => {
     if (n.parents) visualOrder(n.parents).forEach(name);
@@ -115,7 +114,7 @@ export function costOf(root: Node, genders: number): Cost {
   };
 }
 
-// ---------- Pokémon base (1x31) que tiene el jugador ----------
+// Pokémon base (1x31) que tiene el jugador
 export type Inventory = Partial<Record<Stat, { m: number; f: number }>>;
 /**
  * Estrategia de género de los huevos:
@@ -235,7 +234,7 @@ export function bestOrder(stats: Stat[], plan: (order: Stat[]) => Node, missing:
   return best;
 }
 
-// ---------- posiciones en el lienzo ----------
+// Posiciones en el lienzo
 // 'tree': pirámide invertida (1x31 arriba, objetivo abajo), hembra a la izquierda y macho a la derecha: la línea del
 // Pokémon del jugador queda a la izquierda y los pasos van de izquierda a derecha.
 // 'bracket': esquema de llaves (1x31 a la izquierda, objetivo a la derecha), hembra arriba y macho abajo.

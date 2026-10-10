@@ -258,7 +258,7 @@ const clientData = { recommended, species, stats: STAT_INFO, egg: EGG, buckets: 
   };
   const GENDER_WORD: Record<string, string> = { M: 'macho', F: 'hembra', N: 'sin género', '': 'al azar' };
 
-  // ---------- estado (se guarda en este navegador) ----------
+  // Estado (se guarda en este navegador)
   interface State {
     v: 2;
     target: string;
@@ -314,7 +314,7 @@ const clientData = { recommended, species, stats: STAT_INFO, egg: EGG, buckets: 
     state = sanitize(JSON.parse(localStorage.getItem(KEY) ?? 'null')) ?? state;
   } catch {}
 
-  // ---------- piezas visuales ----------
+  // Piezas visuales
   const chip = ([label, color]: [string, string]) => `<span class="pill" style="--c:${color}">${label}</span>`;
   const statChip = (s: Stat) => {
     const i = statInfo.get(s)!;
@@ -336,7 +336,7 @@ const clientData = { recommended, species, stats: STAT_INFO, egg: EGG, buckets: 
       ${statDots(n.stats)}
     </span>`;
 
-  // ---------- 1. buscar Pokémon ----------
+  // 1. buscar Pokémon
   const search = $('search') as HTMLInputElement;
   search.addEventListener('input', () => {
     const q = fold(search.value).replace(/^#0*/, '');
@@ -369,7 +369,7 @@ const clientData = { recommended, species, stats: STAT_INFO, egg: EGG, buckets: 
   let showAll = false; // lista completa de parejas
   let eggFilter = ''; // ver solo las parejas de un grupo huevo
 
-  // ---------- plan actual ----------
+  // Plan actual
   let plan: Node;
   let invFit: Fit; // cómo encajan los Pokémon base del jugador
   let gplan: GenderPlan; // qué huevos se pagan y cuáles van al azar
@@ -385,7 +385,7 @@ const clientData = { recommended, species, stats: STAT_INFO, egg: EGG, buckets: 
     return buildPlan(order, t.slug, t.male, state.partner, state.final, mainOf());
   };
 
-  // ---------- pintar ----------
+  // Pintar
   function render(fit = false) {
     const t = bySlug.get(state.target);
     const panels = ['p-stats', 'p-partner', 'p-inv', 'p-gender', 'plan'];
@@ -621,7 +621,7 @@ const clientData = { recommended, species, stats: STAT_INFO, egg: EGG, buckets: 
       ${extra.length ? `<p class="warn">Además necesitas: ${extra.map((n) => `Ditto ${n.stats.length}x31`).join(', ')} (solo atrapándolos).</p>` : ''}`;
   }
 
-  // ---------- lienzo infinito ----------
+  // Lienzo infinito
   const viewport = $('viewport');
   const world = $('world');
   let pos = new Map<string, { x: number; y: number }>();
@@ -933,7 +933,7 @@ const clientData = { recommended, species, stats: STAT_INFO, egg: EGG, buckets: 
   $('zout').addEventListener('click', () => zoomAt(1 / 1.3, ...center(), true));
   $('zfit').addEventListener('click', () => focus(nodes.map((n) => n.id), true, 1));
 
-  // ---------- eventos del formulario ----------
+  // Eventos del formulario
   $('stats').addEventListener('change', () => {
     const picked = [...document.querySelectorAll<HTMLInputElement>('#stats input:checked')].map((i) => i.value as Stat);
     if (!picked.length) return render(); // al menos un IV

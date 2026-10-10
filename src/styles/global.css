@@ -71,7 +71,7 @@ img {
   outline-offset: 3px;
 }
 
-/* ---------- neumorfismo: tarjetas y paneles salen de la superficie ---------- */
+/* Neumorfismo: tarjetas y paneles salen de la superficie */
 .panel,
 .card,
 .mega,
@@ -115,7 +115,7 @@ select,
   box-shadow: var(--neu-in);
 }
 
-/* ---------- carga: brillo mientras llega la imagen ---------- */
+/* Carga: brillo mientras llega la imagen */
 img[loading='lazy']:not(.ld) {
   background: linear-gradient(100deg, transparent 30%, rgb(255 255 255 / 0.06) 50%, transparent 70%) var(--surface-2);
   background-size: 200% 100%;
@@ -128,7 +128,7 @@ img[loading='lazy']:not(.ld) {
   }
 }
 
-/* ---------- entrada suave del contenido ---------- */
+/* Entrada suave del contenido */
 .rise {
   animation: rise 0.55s cubic-bezier(0.2, 0.7, 0.2, 1) both;
   animation-delay: calc(var(--i, 0) * 60ms);
@@ -140,7 +140,7 @@ img[loading='lazy']:not(.ld) {
   }
 }
 
-/* ---------- transiciones entre páginas (View Transitions nativas) ---------- */
+/* Transiciones entre páginas (View Transitions nativas) */
 @view-transition {
   navigation: auto;
 }
@@ -168,14 +168,14 @@ img[loading='lazy']:not(.ld) {
   }
 }
 
-/* ---------- iconos SVG (src/lib/icons.ts) ---------- */
+/* Iconos SVG (src/lib/icons.ts) */
 .ico {
   flex: none;
   display: inline-block;
   vertical-align: -0.2em;
 }
 
-/* ---------- casillas de verificación: hundidas, y al marcar se llenan con una palomita ---------- */
+/* Casillas de verificación: hundidas, y al marcar se llenan con una palomita */
 input[type='checkbox'] {
   appearance: none;
   -webkit-appearance: none;
