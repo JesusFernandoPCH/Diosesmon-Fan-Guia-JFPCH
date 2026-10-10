@@ -15,6 +15,13 @@ export const sections = [
     color: '#e86fd0',
   },
   {
+    slug: 'safari',
+    title: 'Mapa del Safari',
+    desc: 'El mapa completo con las Poképaradas, los entrenadores y los taxis, y sus coordenadas.',
+    art: 115,
+    color: '#c8d94f',
+  },
+  {
     slug: 'evoluciones',
     title: 'Evoluciones',
     desc: 'Cadenas evolutivas y cómo cumplir cada requisito: nivel, piedras, amistad, intercambio y más.',

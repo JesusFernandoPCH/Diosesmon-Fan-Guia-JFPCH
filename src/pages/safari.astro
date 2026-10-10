@@ -1,0 +1,470 @@
+---
+import Base from '../layouts/Base.astro';
+import Icon from '../components/Icon.astro';
+import points from '../data/safari.json';
+
+// Un tipo por cada cosa que el jugador busca en el Safari
+const TYPES = [
+  { id: 'parada', name: 'Poképarada', plural: 'Poképaradas', icon: 'parada', color: '#4aa8ff' },
+  { id: 'entrenador', name: 'Entrenador', plural: 'Entrenadores', icon: 'user', color: '#e3350d' },
+  { id: 'taxi', name: 'Taxi', plural: 'Taxis', icon: 'taxi', color: '#f5c518' },
+] as const;
+const byType = (id: string) => points.filter((p) => p.type === id);
+const fmt = (n: number) => String(n).replace('-', '−');
+---
+
+<Base
+  title="Mapa del Safari: Poképaradas, entrenadores y taxis"
+  description="Mapa interactivo del Safari de Diosesmon con las coordenadas de todas las Poképaradas, los entrenadores y los taxis."
+  breadcrumbs={[{ name: 'Mapa del Safari', path: '/safari/' }]}
+>
+  <h1 class="rise">Mapa del Safari</h1>
+  <p class="intro">
+    Arrastra para moverte y usa la rueda (o pellizca) para acercar. Toca un punto para ver sus coordenadas.
+  </p>
+
+  <form id="safari-filters" class="filters" aria-label="Qué mostrar en el mapa">
+    {
+      TYPES.map((t) => (
+        <label class="opt" style={`--c: ${t.color}`}>
+          <input type="checkbox" name="t" value={t.id} checked />
+          <span>
+            <Icon name={t.icon} size={16} /> {t.plural} <b>{byType(t.id).length}</b>
+          </span>
+        </label>
+      ))
+    }
+  </form>
+
+  <div class="mapbox">
+    <div id="safari-map" role="application" aria-label="Mapa del Safari">
+      <noscript><p class="nojs">El mapa necesita JavaScript. Abajo tienes la lista de coordenadas.</p></noscript>
+    </div>
+    <p class="readout" aria-live="off"><Icon name="pin" size={15} /> <span id="safari-xz">Mueve el cursor sobre el mapa</span></p>
+  </div>
+
+  <section class="export" aria-labelledby="export-title">
+    <h2 id="export-title"><Icon name="save" size={20} /> Llévalos a tu minimapa</h2>
+    <p>
+      Descarga los {points.length} puntos como waypoints de <strong>Xaero's Minimap</strong> y úsalos dentro del servidor.
+      Cierra Minecraft antes de copiar el archivo.
+    </p>
+    <div class="actions">
+      <a class="btn" href="/safari-waypoints.txt" download="mw$default_1.txt"><Icon name="save" size={16} /> Descargar mw$default_1.txt</a>
+      <button type="button" id="copy-wp"><Icon name="clipboard" size={16} /> Copiar contenido</button>
+    </div>
+    <ol>
+      <li>
+        Pega el archivo en esta carpeta de tu instalación de Minecraft:
+        <code>.minecraft\xaero\minimap\Multiplayer_donut.diosesmon.net\dim%0\</code>
+        <small>Con CurseForge es la carpeta de tu instancia: <code>...\Instances\&lt;tu instancia&gt;\xaero\minimap\...</code></small>
+      </li>
+      <li>
+        <strong>Si ya tienes un <code>mw$default_1.txt</code>, no lo reemplaces</strong>: ábrelo con el Bloc de notas y pega al
+        final las líneas del nuevo (botón «Copiar contenido»). Así conservas tus waypoints.
+      </li>
+      <li>
+        Si la carpeta no existe, entra una vez al servidor con el minimapa instalado para que se cree. Su nombre es
+        <code>Multiplayer_</code> más la dirección con la que entras (si usas otra, tendrá otro nombre).
+      </li>
+    </ol>
+  </section>
+
+  <h2 class="lists-title">Coordenadas</h2>
+  <div class="lists">
+    {
+      TYPES.map((t) => (
+        <section style={`--c: ${t.color}`} data-type={t.id}>
+          <h3><Icon name={t.icon} size={18} /> {t.plural}</h3>
+          <ul>
+            {byType(t.id).map((p) => (
+              <li>
+                <button type="button" class="pt" data-type={p.type} data-n={p.n} data-x={p.x} data-y={p.y} data-z={p.z} aria-label={`${t.name} ${p.n}: ver en el mapa`}>
+                  <b>{p.n}</b>
+                  <span>X {fmt(p.x)} · Z {fmt(p.z)}</span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ))
+    }
+  </div>
+  <p class="note">
+    Ordenados de más cerca a más lejos del centro. El mapa sale de la exploración del servidor; si algo cambió en el
+    Safari, puede tardar en actualizarse aquí.
+  </p>
+
+  <script is:inline type="application/json" id="safari-data" set:html={JSON.stringify({ points, types: TYPES })} />
+</Base>
+
+<script>
+  import L from 'leaflet';
+  import 'leaflet/dist/leaflet.css';
+  import { icon } from '../lib/icons';
+
+  type Pt = { type: string; n: number; x: number; y: number; z: number };
+  type T = { id: string; name: string; plural: string; icon: any; color: string };
+  const data = JSON.parse(document.getElementById('safari-data')!.textContent!) as { points: Pt[]; types: T[] };
+  const T = new Map(data.types.map((t) => [t.id, t]));
+
+  // El mapa mide 3072x3072 bloques con el centro del mundo en el medio; z=4 es un píxel por bloque
+  const SIZE = 3072, HALF = SIZE / 2, NATIVE = 4;
+  const el = document.getElementById('safari-map')!;
+  const map = L.map(el, {
+    crs: L.CRS.Simple, minZoom: 0, maxZoom: 5, zoomSnap: 0.25, zoomDelta: 1, attributionControl: false,
+    zoomControl: true, inertia: true, fadeAnimation: false, updateWhenZooming: false, wheelPxPerZoomLevel: 140,
+  });
+  const ll = (x: number, z: number) => map.unproject([x + HALF, z + HALF], NATIVE);
+  const bounds = L.latLngBounds(map.unproject([0, SIZE], NATIVE), map.unproject([SIZE, 0], NATIVE));
+  L.tileLayer('/img/safari/{z}/{x}_{y}.webp', { tileSize: 256, minNativeZoom: 0, maxNativeZoom: NATIVE, minZoom: 0, maxZoom: 5, noWrap: true, bounds }).addTo(map);
+  map.fitBounds(bounds);
+  // no se puede alejar más de lo que cabe el mapa entero (más allá solo se veía vacío)
+  const fit = () => map.setMinZoom(map.getBoundsZoom(bounds));
+  fit();
+  map.on('resize', fit);
+  map.setMaxBounds(bounds.pad(0.25));
+  // al pasar del zoom nativo se agranda: sin suavizado para que los bloques se vean nítidos
+  // y los marcadores crecen con el zoom: de lejos son puntitos, de cerca se leen
+  const onZoom = () => {
+    const z = map.getZoom();
+    el.classList.toggle('px', z > NATIVE);
+    el.style.setProperty('--pin', `${z < 1.5 ? 14 : z < 2.5 ? 20 : z < 3.5 ? 26 : 32}px`);
+  };
+  map.on('zoomend', onZoom);
+  onZoom();
+
+  const fmt = (n: number) => String(n).replace('-', '−');
+  const layers = new Map<string, L.LayerGroup>();
+  const markers = new Map<string, L.Marker>();
+  for (const t of data.types) layers.set(t.id, L.layerGroup().addTo(map));
+  for (const p of data.points) {
+    const t = T.get(p.type)!;
+    const m = L.marker(ll(p.x, p.z), {
+      icon: L.divIcon({ className: 'pin', html: `<span style="--c:${t.color}">${icon(t.icon, 16)}</span>`, iconSize: [32, 32], iconAnchor: [16, 16] }),
+      keyboard: true, title: `${t.name} ${p.n}`,
+    });
+    m.bindPopup(
+      `<strong>${t.name} ${p.n}</strong><br>X ${fmt(p.x)} · Y ${p.y} · Z ${fmt(p.z)}<br><button type="button" class="copy" data-c="${p.x} ${p.y} ${p.z}">Copiar coordenadas</button>`,
+      { closeButton: false, autoPanPadding: [30, 30] },
+    );
+    m.addTo(layers.get(p.type)!);
+    markers.set(`${p.type}-${p.n}`, m);
+  }
+
+  // filtros
+  document.getElementById('safari-filters')!.addEventListener('change', (e) => {
+    const i = e.target as HTMLInputElement;
+    const g = layers.get(i.value)!;
+    i.checked ? g.addTo(map) : g.remove();
+  });
+
+  // coordenadas bajo el cursor
+  const xz = document.getElementById('safari-xz')!;
+  let raf = 0, last: L.LatLng;
+  map.on('mousemove', (e: L.LeafletMouseEvent) => {
+    last = e.latlng;
+    raf ||= requestAnimationFrame(() => {
+      raf = 0;
+      const p = map.project(last, NATIVE);
+      xz.textContent = `X ${fmt(Math.round(p.x - HALF))} · Z ${fmt(Math.round(p.y - HALF))}`;
+    });
+  });
+
+  // copiar desde el popup
+  const copy = async (btn: HTMLElement, text: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      btn.textContent = 'Copiado';
+    } catch {
+      btn.textContent = text;
+    }
+  };
+  el.addEventListener('click', (e) => {
+    const b = (e.target as HTMLElement).closest<HTMLElement>('.copy');
+    if (b) copy(b, b.dataset.c!);
+  });
+
+  // copiar los waypoints para pegarlos al final del archivo propio
+  const cp = document.getElementById('copy-wp')!;
+  cp.addEventListener('click', async () => {
+    try {
+      await navigator.clipboard.writeText(await (await fetch('/safari-waypoints.txt')).text());
+      cp.lastChild!.textContent = ' Copiado';
+    } catch {
+      cp.lastChild!.textContent = ' No se pudo copiar: usa la descarga';
+    }
+  });
+
+  // la lista de abajo lleva al punto
+  document.querySelector('.lists')!.addEventListener('click', (e) => {
+    const b = (e.target as HTMLElement).closest<HTMLButtonElement>('.pt');
+    if (!b) return;
+    const g = layers.get(b.dataset.type!)!;
+    if (!map.hasLayer(g)) {
+      g.addTo(map);
+      (document.querySelector(`#safari-filters input[value=${b.dataset.type}]`) as HTMLInputElement).checked = true;
+    }
+    el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    map.flyTo(ll(+b.dataset.x!, +b.dataset.z!), 5, { duration: 0.8 });
+    markers.get(`${b.dataset.type}-${b.dataset.n}`)!.openPopup();
+  });
+</script>
+
+<style>
+  .intro {
+    color: var(--muted);
+    margin-top: 0;
+  }
+  .filters {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin: 12px 0;
+  }
+  .opt {
+    position: relative;
+  }
+  .opt input {
+    position: absolute;
+    opacity: 0;
+    pointer-events: none;
+  }
+  .opt span {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 14px;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    font-size: 0.9rem;
+    cursor: pointer;
+    opacity: 0.55;
+  }
+  .opt span :global(.ico) {
+    color: var(--c);
+  }
+  .opt b {
+    color: var(--muted);
+    font-weight: 600;
+  }
+  .opt input:checked + span {
+    opacity: 1;
+    border-color: var(--c);
+  }
+  .opt input:focus-visible + span {
+    outline: 2px solid var(--text);
+  }
+
+  .mapbox {
+    margin-bottom: 8px;
+  }
+  #safari-map {
+    isolation: isolate; /* los paneles de Leaflet (z-index alto) no pasan por encima del encabezado */
+    height: clamp(460px, 80vh, 860px);
+    border-radius: var(--radius);
+    background: #12141a;
+    overflow: hidden;
+    box-shadow: var(--neu-in);
+  }
+  #safari-map.px :global(.leaflet-tile) {
+    image-rendering: pixelated;
+  }
+  .nojs {
+    padding: 20px;
+    color: var(--muted);
+  }
+  .readout {
+    contain: layout paint; /* cambiar el texto no recalcula el resto de la página */
+    height: 1.5em;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin: 8px 4px 0;
+    font-size: 0.85rem;
+    color: var(--muted);
+  }
+
+  /* Marcadores y ventana de coordenadas del mapa */
+  :global(.pin) {
+    background: none;
+    border: 0;
+  }
+  :global(.pin span) {
+    display: grid;
+    place-items: center;
+    width: var(--pin, 26px);
+    height: var(--pin, 26px);
+    margin: calc((32px - var(--pin, 26px)) / 2);
+    color: #fff;
+    background: var(--c);
+    border: 1.5px solid #fff;
+    border-radius: 50%;
+    box-shadow: 0 2px 6px rgb(0 0 0 / 0.55);
+  }
+  :global(.pin span .ico) {
+    width: 58%;
+    height: 58%;
+    color: #14161d;
+  }
+  #safari-map :global(.leaflet-popup-content-wrapper) {
+    background: var(--surface);
+    color: var(--text);
+    border-radius: 12px;
+  }
+  #safari-map :global(.leaflet-popup-tip) {
+    background: var(--surface);
+  }
+  #safari-map :global(.leaflet-popup-content) {
+    margin: 10px 14px;
+    font: 0.9rem/1.5 var(--font-body);
+  }
+  #safari-map :global(.leaflet-popup-content .copy) {
+    margin-top: 6px;
+    box-shadow: none;
+    padding: 4px 10px;
+    font: inherit;
+    font-size: 0.85rem;
+    color: inherit;
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    cursor: pointer;
+  }
+  #safari-map :global(.leaflet-bar a) {
+    background: var(--surface);
+    color: var(--text);
+    border-color: var(--border);
+  }
+
+  /* el desenfoque del encabezado se recalcula con cada fotograma del mapa que pasa por debajo */
+  :global(header#top) {
+    backdrop-filter: none;
+    background: color-mix(in srgb, var(--bg) 94%, transparent);
+  }
+
+  .export {
+    margin-top: 24px;
+    padding: 16px 18px;
+    border-radius: var(--radius);
+    background: color-mix(in srgb, var(--surface) 50%, transparent);
+    border: 1px solid var(--border);
+  }
+  .export h2 {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 1.15rem;
+  }
+  .export p {
+    margin: 0 0 12px;
+    color: var(--muted);
+  }
+  .actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-bottom: 14px;
+  }
+  .actions .btn,
+  .actions button {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 14px;
+    font: inherit;
+    font-size: 0.92rem;
+    font-weight: 600;
+    color: inherit;
+    text-decoration: none;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    cursor: pointer;
+  }
+  .actions .btn {
+    color: #fff;
+    background: var(--accent);
+    border-color: var(--accent);
+  }
+  .export ol {
+    margin: 0;
+    padding-left: 1.2em;
+    display: grid;
+    gap: 8px;
+    font-size: 0.92rem;
+  }
+  .export small {
+    display: block;
+    margin-top: 2px;
+    color: var(--muted);
+  }
+  .export code {
+    padding: 1px 6px;
+    font-size: 0.85em;
+    word-break: break-all;
+    background: var(--surface-2);
+    border-radius: 6px;
+  }
+
+  .lists-title {
+    margin-top: 28px;
+  }
+  .lists {
+    display: grid;
+    gap: 16px;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr));
+    align-items: start;
+  }
+  .lists section {
+    padding: 14px;
+    border-radius: var(--radius);
+    background: color-mix(in srgb, var(--surface) 50%, transparent);
+    border: 1px solid var(--border);
+  }
+  .lists h3 {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 0 0 10px;
+    font-size: 1.05rem;
+    color: var(--c);
+  }
+  .lists ul {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+    gap: 6px;
+  }
+  .pt {
+    width: 100%;
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    padding: 6px 10px;
+    font: inherit;
+    font-size: 0.82rem;
+    color: inherit;
+    text-align: left;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    cursor: pointer;
+  }
+  .pt b {
+    min-width: 1.4em;
+    color: var(--c);
+    font-family: var(--font-title);
+  }
+  .pt span {
+    color: var(--muted);
+  }
+  .note {
+    margin-top: 16px;
+    font-size: 0.85rem;
+    color: var(--muted);
+  }
+</style>

@@ -58,6 +58,9 @@ const PATHS = {
   cookie: '<path d="M12 3a9 9 0 1 0 9 9 4 4 0 0 1-4-4 4 4 0 0 1-5-5z"/><path d="M8 13h.01M12 16h.01M15 13h.01"/>',
   gem: '<path d="M6 3h12l4 6-10 12L2 9z"/><path d="M2 9h20M12 21 8 9l4-6 4 6z"/>',
   pointer: '<path d="m9 9 11 4-5 2-2 5z"/><path d="M4 4l3 3M3 10h3M10 3v3"/>',
+  taxi: '<path d="M4 16v-4l2-5h12l2 5v4zM4 16v3M20 16v3M9 7V4h6v3"/><path d="M7.5 13h.01M16.5 13h.01"/>',
+  parada: '<circle cx="12" cy="9" r="5"/><path d="M7 9h10M12 14v7M8 21h8"/>',
+  user: '<circle cx="12" cy="7.5" r="3.5"/><path d="M5 21a7 7 0 0 1 14 0"/>',
 } as const;
 
 export type IconName = keyof typeof PATHS;

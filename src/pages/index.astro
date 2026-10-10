@@ -5,7 +5,7 @@ import { artwork, sections } from '../data/sections';
 ---
 
 <Base
-  description="Guía en español de Cobblemon para el servidor Diosesmon: dónde aparece cada Pokémon, crianza 6x31 paso a paso, evoluciones, megas, interacciones y fusiones."
+  description="Guía en español de Cobblemon para el servidor Diosesmon: dónde aparece cada Pokémon, crianza 6x31 paso a paso, mapa del Safari, evoluciones, megas, interacciones y fusiones."
 >
   <section class="intro">
     <h1 class="rise">Todo lo que necesitas para <span>Cobblemon</span> en Diosesmon</h1>
@@ -62,21 +62,22 @@ import { artwork, sections } from '../data/sections';
     .grid li {
       grid-column: span 3;
     }
-    .grid li:nth-child(-n + 2) {
-      grid-column: span 6;
+    /* las tres secciones principales, más grandes */
+    .grid li:nth-child(-n + 3) {
+      grid-column: span 4;
     }
-    .grid li:nth-child(-n + 2) .card {
+    .grid li:nth-child(-n + 3) .card {
       padding: 24px;
       gap: 20px;
     }
-    .grid li:nth-child(-n + 2) img {
-      width: 128px;
-      height: 128px;
+    .grid li:nth-child(-n + 3) img {
+      width: 112px;
+      height: 112px;
     }
-    .grid li:nth-child(-n + 2) h2 {
-      font-size: 1.6rem;
+    .grid li:nth-child(-n + 3) h2 {
+      font-size: 1.5rem;
     }
-    .grid li:nth-child(n + 3) .card {
+    .grid .card {
       flex-direction: column;
       align-items: flex-start;
     }
