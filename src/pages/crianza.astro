@@ -68,8 +68,8 @@ const clientData = { recommended, species, stats: STAT_INFO, egg: EGG, buckets: 
   <details class="howto">
     <summary>¿Cómo funciona la crianza en Diosesmon?</summary>
     <ol>
-      <li>Abre la <strong>Guardería</strong> del PokePad y elige una <strong>hembra</strong> y un <strong>macho</strong> que compartan un <strong>grupo huevo</strong> (Ditto cría con cualquiera).</li>
-      <li>El huevo es de la especie de la <strong>hembra</strong> (o del que no es Ditto). Por eso la pareja puede ser un Pokémon fácil de atrapar.</li>
+      <li>Abre la <strong>Guardería</strong> del PokePad y elige una <strong>hembra</strong> y un <strong>macho</strong> que compartan un <strong>grupo huevo</strong> (Ditto cría con cualquiera; los Pokémon sin género, como Rotom, crían como la hembra con un macho de su grupo huevo).</li>
+      <li>El huevo es de la especie de la <strong>hembra</strong> o del Pokémon sin género (o del que no es Ditto). Por eso la pareja puede ser un Pokémon fácil de atrapar.</li>
       <li>
         Cada padre lleva el <strong>objeto Recio</strong> del IV que el otro no tiene: el huevo junta los IVs 31 de los dos. Ej.: 1x31 en Ataque
         <ItemChip id="cobblemon:power_bracer" /> + 1x31 en Defensa <ItemChip id="cobblemon:power_belt" /> → 2x31.
@@ -427,7 +427,7 @@ const clientData = { recommended, species, stats: STAT_INFO, egg: EGG, buckets: 
     if (mode === 'pair' && !partners.some((p) => p.slug === state.partner)) state.partner = partners[0]?.slug ?? t.slug;
     if (mode === 'ditto') {
       state.partner = 'ditto';
-      $('partner-hint').innerHTML = `${t.es} ${t.male < 0 ? 'no tiene género' : 'solo es macho'}: solo puede criar con <strong>Ditto</strong>. Ditto no se puede criar, así que los Ditto con varios 31 hay que atraparlos.`;
+      $('partner-hint').innerHTML = `${t.es} solo es macho: solo puede criar con <strong>Ditto</strong>. Ditto no se puede criar, así que los Ditto con varios 31 hay que atraparlos.`;
       $('partners').innerHTML = `<div class="partner on"><img src="${thumb('ditto')}" alt="" width="64" height="64" /><span><strong>Ditto</strong></span></div>`;
     } else {
       const groups = t.egg.map((g) => `<strong>${data.egg[g] ?? g}</strong>`);
@@ -435,7 +435,7 @@ const clientData = { recommended, species, stats: STAT_INFO, egg: EGG, buckets: 
       const pool = eggFilter ? partners.filter((p) => p.egg.includes(eggFilter)) : partners;
       $('partner-hint').innerHTML = `
         <span>${t.es} pertenece ${t.egg.length > 1 ? `a <strong>${t.egg.length} grupos huevo</strong>: ${groups.join(' y ')}. Puede criar con cualquier Pokémon que comparta <strong>al menos uno</strong> de ellos` : `al grupo huevo ${groups[0]}. Puede criar con cualquier Pokémon de ese grupo`}.
-        Solo una hembra de la base tiene que ser ${t.es}; el resto usa la pareja. Ordenamos por las más comunes y fáciles de capturar:</span>
+        ${t.male < 0 ? `${t.es} no tiene género: hace el papel de <strong>hembra</strong> y su pareja es un <strong>macho</strong> de su grupo huevo (también puede criar con Ditto).` : `Solo una hembra de la base tiene que ser ${t.es};`} El resto usa la pareja. Ordenamos por las más comunes y fáciles de capturar:</span>
         ${
           t.egg.length > 1
             ? `<span class="eggs">${[['', `Todos (${partners.length})`], ...t.egg.map((g) => [g, `${icon('egg', 14)} ${data.egg[g] ?? g} (${partners.filter((p) => p.egg.includes(g)).length})`])]
@@ -501,7 +501,7 @@ const clientData = { recommended, species, stats: STAT_INFO, egg: EGG, buckets: 
       modeOf(t.male) === 'ditto'
         ? 'Con Ditto no hay géneros que elegir.'
         : state.strategy === 'save'
-          ? `En cada par de hermanos que se cruzarán, el primero sale <strong>al azar</strong> (gratis): anotas qué salió y al segundo le eliges el género <strong>contrario</strong>. La línea de <strong>${t.es}</strong> siempre se paga, porque la hembra tiene que ser de esa especie.`
+          ? `En cada par de hermanos que se cruzarán, el primero sale <strong>al azar</strong> (gratis): anotas qué salió y al segundo le eliges el género <strong>contrario</strong>. ${t.male < 0 ? `<strong>${t.es}</strong> no tiene género: en su línea solo se paga el género del macho de la pareja.` : `La línea de <strong>${t.es}</strong> siempre se paga, porque la hembra tiene que ser de esa especie.`}`
           : 'Eliges el género de todos los huevos desde el principio: no esperas resultados, pero cuesta más.';
 
     nodes = flatten(plan);
@@ -531,7 +531,7 @@ const clientData = { recommended, species, stats: STAT_INFO, egg: EGG, buckets: 
   function renderInventory(t: Sp) {
     const flexible = state.strategy === 'save' && modeOf(t.male) === 'pair';
     const main = mainOf();
-    const who = modeOf(t.male) === 'pair' ? `tu ${t.es} ${gs.f}` : `tu ${t.es}`;
+    const who = t.male < 0 ? `tu ${t.es} (sin género)` : modeOf(t.male) === 'pair' ? `tu ${t.es} ${gs.f}` : `tu ${t.es}`;
     $('starter').innerHTML = `
       <img src="${thumb(t.slug)}" alt="" width="64" height="64" />
       <div>
@@ -836,7 +836,7 @@ const clientData = { recommended, species, stats: STAT_INFO, egg: EGG, buckets: 
       <div class="pair">
         <div><span class="side m">${m.gender === 'N' ? 'Sin género' : `${gs.m} Macho`}</span>${monCard(m)}${itemTag(m.item!)}</div>
         <span class="x">×</span>
-        <div><span class="side f">${f.species === 'ditto' ? 'Ditto' : `${gs.f} Hembra`}</span>${monCard(f)}${itemTag(f.item!)}</div>
+        <div><span class="side f">${f.species === 'ditto' ? 'Ditto' : f.gender === 'N' ? `${GENDER_ICON.N} Sin género` : `${gs.f} Hembra`}</span>${monCard(f)}${itemTag(f.item!)}</div>
       </div>
       <div class="arrow">${icon('down')} Resultado</div>
       <div class="result">${monCard(n)}</div>

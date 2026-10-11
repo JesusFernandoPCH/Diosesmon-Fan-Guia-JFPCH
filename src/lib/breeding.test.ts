@@ -68,8 +68,12 @@ assert.ok(!flexFit.gender.has(raltsLeaf.id));
 }
 
 // sin género (Magnemite): cría con Ditto, sin pagar géneros
-const mag = buildPlan(['hp', 'speed'], 'magnemite', -1, '', '');
-assert.deepEqual(mag.parents!.map((p) => [p.species, p.gender]), [['ditto', 'N'], ['magnemite', 'N']]);
+// sin género: hace de hembra (lado izquierdo) y la pareja es un macho de su grupo huevo
+const mag = buildPlan(['hp', 'speed'], 'magnemite', -1, 'voltorb', '');
+assert.deepEqual(mag.parents!.map((p) => [p.species, p.gender]), [['magnemite', 'N'], ['voltorb', 'M']]);
+// solo macho: únicamente con Ditto
+const tauros = buildPlan(['hp', 'speed'], 'tauros', 1, '', '');
+assert.deepEqual(tauros.parents!.map((p) => [p.species, p.gender]), [['ditto', 'N'], ['tauros', 'M']]);
 const magFit = fitInventory(mag, 'magnemite', 'save', {});
 assert.equal(planGenders(mag, { target: 'magnemite', strategy: 'save', results: {}, final: '', both: () => false, fit: magFit }).paid.size, 0);
 console.log('ok');

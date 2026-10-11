@@ -19,9 +19,10 @@ export interface Node {
   parents?: [Node, Node]; // [hembra (o Ditto), macho]
 }
 
-/** Cómo cría la especie objetivo: con pareja de su grupo huevo, o solo con Ditto (sin género / solo machos). */
+/** Cómo cría la especie objetivo: con pareja (macho) de su grupo huevo, o solo con Ditto (los que son solo macho).
+ * Los sin género crían como la hembra: su pareja es un macho de su grupo huevo (o Ditto). */
 export type Mode = 'pair' | 'ditto';
-export const modeOf = (male: number): Mode => (male < 0 || male === 1 ? 'ditto' : 'pair');
+export const modeOf = (male: number): Mode => (male === 1 ? 'ditto' : 'pair');
 /** Género fijo de la especie: sin género, solo macho o solo hembra; '' si puede ser ambos. */
 export const fixedGender = (male: number): Gender => (male < 0 ? 'N' : male === 1 ? 'M' : male === 0 ? 'F' : '');
 
@@ -46,7 +47,8 @@ export function buildPlan(stats: Stat[], target: string, targetMale: number, par
     }
     const left = set.filter((s) => s !== b);
     const right = set.filter((s) => s !== a);
-    const female = mode === 'ditto' && species === target ? ['ditto', 'N'] : [species, 'F'];
+    // el objetivo sin género ocupa el lado de la hembra, pero sigue siendo 'sin género'
+    const female = mode === 'ditto' && species === target ? ['ditto', 'N'] : [species, species === target ? fixedGender(targetMale) || 'F' : 'F'];
     const male = species === target ? (mode === 'ditto' ? [target, fixedGender(targetMale)] : [partner, 'M']) : [partner, 'M'];
     node.parents = [make(left, female[0], female[1] as Gender, a), make(right, male[0], male[1] as Gender, b)];
     return node;
