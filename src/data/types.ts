@@ -17,8 +17,8 @@ export interface Spawn {
   places?: string[];
   nearby?: string[];
   snack?: boolean;
-  lure?: number;
-  noLure?: boolean;
+  lure?: number; // Atracción mínima
+  lureMax?: number; // Atracción máxima
   slime?: boolean;
   herd?: boolean;
   alpha?: boolean;
@@ -60,6 +60,7 @@ export interface Pokemon {
   cats: string[];
   catchRate: number;
   friendship: number;
+  ev?: string[]; // EV que da (solo Pokémon que se pescan): hp, atk, def, spa, spd, spe
   spawns: Spawn[];
   evos: Evo[];
 }

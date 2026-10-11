@@ -3,6 +3,7 @@
 // receta (public/img/recipe/<mod>_<objeto>.webp, ej. cobblemon_magmarizer.webp; si la imagen no existe no se muestra).
 // Objetos sin regla: se muestran menas y Pokémon según los datos de Cobblemon.
 import megaData from './megas.json';
+import baitData from './baits.json';
 import { all, bySlug } from '../lib/evo';
 import type { Item, Mega } from './types';
 import type { IconName } from '../lib/icons';
@@ -56,10 +57,13 @@ const FRIENDSHIP = ['rare_candy', 'soothe_bell', 'luxury_ball', 'friend_ball', '
 
 const DEFAULT: How = { ores: true, drops: true, recipe: true };
 
+const BERRY: Line = { icon: 'leaf', text: 'Se cosecha de los árboles de bayas de Cobblemon.' };
+
 export function obtainOf(id: string): How {
   if (OBTAIN[id]) return OBTAIN[id];
   if (STONES.includes(id)) return { ores: true, text: [REWARDS] };
   if (FRIENDSHIP.includes(id)) return { ores: true, drops: true, text: [SHOP] };
+  if (id in baitData) return { text: [BERRY] }; // bayas que sirven de cebo para pescar
   if (HELD_EVO.has(id)) return { drops: true, recipe: true };
   const mega = megas.find((m) => m.stone === id);
   if (mega)

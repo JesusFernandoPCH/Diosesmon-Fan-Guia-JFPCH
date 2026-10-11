@@ -5,6 +5,7 @@ import BiomeList from '../../components/BiomeList.astro';
 import MoonChip from '../../components/MoonChip.astro';
 import PlaceChip from '../../components/PlaceChip.astro';
 import Tip from '../../components/Tip.astro';
+import ItemChip from '../../components/ItemChip.astro';
 import Icon from '../../components/Icon.astro';
 import EvoTree from '../../components/EvoTree.astro';
 import MegaCard from '../../components/MegaCard.astro';
@@ -16,6 +17,7 @@ import { all, bySlug, familyMembers, rootOf } from '../../lib/evo';
 import { megas as availableMegas } from '../../data/obtain';
 import blocks from '../../data/blocks.json';
 import meta from '../../data/meta.json';
+import baitData from '../../data/baits.json';
 import type { Interaction, Pokemon, Spawn } from '../../data/types';
 import { BLOCK_TAGS, BUCKETS, CATEGORIES, EGG, FORMS, POSITIONS, TIMES, TYPES, ZONES, label } from '../../data/labels';
 
@@ -50,11 +52,41 @@ function conditions(s: Spawn) {
   return out;
 }
 
+// Atracción que pide la pesca: rango [mínimo, máximo] (el encantamiento llega a nivel 3)
+function lureInfo(s: Spawn): [string, string] {
+  const lo = s.lure ?? 0, hi = s.lureMax ?? 3;
+  const how = 'Se encanta en la mesa de encantamientos, o con un libro encantado en el yunque.';
+  if (hi === 0) return ['Caña sin Atracción', 'Solo sale si tu Poké Caña NO tiene el encantamiento Atracción.'];
+  if (lo === 0) return [`Caña con Atracción ${hi} como máximo`, `Sale con la caña sin Atracción o con Atracción hasta nivel ${hi}. Con más nivel ya no sale.`];
+  if (lo === hi) return [`Caña con Atracción ${lo}`, `Tu Poké Caña necesita el encantamiento Atracción de nivel ${lo} exacto (ni más ni menos). ${how}`];
+  if (hi === 3) return [`Caña con Atracción ${lo}+`, `Tu Poké Caña necesita el encantamiento Atracción de nivel ${lo} o más. ${how}`];
+  return [`Caña con Atracción ${lo} a ${hi}`, `Tu Poké Caña necesita Atracción de nivel ${lo} a ${hi}. ${how}`];
+}
+
+// Cebos (bayas) que favorecen a este Pokémon al pescar: por tipo, por grupo huevo o por los EV que da. Salen todos, no solo uno.
+const STATS: Record<string, string> = { hp: 'PS', atk: 'Ataque', def: 'Defensa', spa: 'At. Esp.', spd: 'Def. Esp.', spe: 'Velocidad' };
+const baitWhy = new Map<string, { kind: number; why: string[] }>();
+for (const [item, effects] of Object.entries(baitData as Record<string, { t: string; k: string }[]>)) {
+  for (const e of effects) {
+    let kind = -1, why = '';
+    if (e.t === 'type' && p.types.includes(e.k)) [kind, why] = [0, TYPES[e.k]?.[0] ?? e.k];
+    else if (e.t === 'egg' && p.egg.includes(e.k)) [kind, why] = [1, EGG[e.k] ?? e.k];
+    else if (e.t === 'ev' && p.ev?.includes(e.k)) [kind, why] = [2, STATS[e.k] ?? e.k];
+    if (kind < 0) continue;
+    const cur = baitWhy.get(item) ?? { kind, why: [] };
+    cur.kind = Math.min(cur.kind, kind);
+    cur.why.push(why);
+    baitWhy.set(item, cur);
+  }
+}
+const BAIT_TEXT = ['Tipo', 'Grupo huevo', 'Da EV de'];
+const baits = [...baitWhy].sort((a, b) => a[1].kind - b[1].kind);
+
 // Une spawns que se ven iguales (solo cambian peso, nivel o variantes cosméticas)
 const rows = new Map<string, { s: Spawn; conds: string[] }>();
 for (const s of p.spawns) {
   const conds = conditions(s);
-  const key = JSON.stringify([s.pos, s.alpha ? 'boss' : s.bucket, s.zones, s.except, s.biomes, conds, s.moon, s.places, s.lure, s.noLure]);
+  const key = JSON.stringify([s.pos, s.alpha ? 'boss' : s.bucket, s.zones, s.except, s.biomes, conds, s.moon, s.places, s.lure, s.lureMax]);
   const prevRow = rows.get(key);
   if (!prevRow || prevRow.s.w < s.w) rows.set(key, { s, conds });
 }
@@ -69,6 +101,25 @@ const groups = Object.entries(POSITIONS)
       .sort((a, b) => BUCKET_ORDER.indexOf(a.s.bucket) - BUCKET_ORDER.indexOf(b.s.bucket) || b.s.w - a.s.w),
   }))
   .filter((g) => g.rows.length);
+
+// Rarezas de la pesca de este Pokémon y qué encantamiento las toca (Cobblemon 1.7.3):
+// - Atracción solo desbloquea/limita Pokémon (cada spawn pide un rango de nivel) y acelera la mordida.
+// - Suerte del mar suma niveles a un "nivel de rareza"; cada nivel aplana los pesos de las rarezas (peso^(1/(1.29+0.2·(nivel-1)))).
+const fishRows = [...rows.values()].filter((r) => r.s.pos === 'fishing');
+const fishBuckets = [...new Set(fishRows.map((r) => r.s.bucket))].sort((x, y) => BUCKET_ORDER.indexOf(x) - BUCKET_ORDER.indexOf(y));
+const lureLevels = [0, 1, 2, 3].map((l) => ({
+  l,
+  buckets: fishBuckets.filter((b) => fishRows.some((r) => r.s.bucket === b && (r.s.lure ?? 0) <= l && l <= (r.s.lureMax ?? 3))),
+}));
+const lureMatters = lureLevels.some((x) => x.buckets.join() !== lureLevels[0].buckets.join());
+const world = meta.world as Record<string, number>;
+const rarityOdds = (tier: number, bucket: string) => {
+  const f = 1.29 + 0.2 * (tier - 1);
+  const w = Object.fromEntries(Object.entries(world).map(([k, v]) => [k, tier ? v ** (1 / f) : v]));
+  return (w[bucket] / Object.values(w).reduce((x, y) => x + y, 0)) * 100;
+};
+const oddsText = (n: number) => `${n >= 10 ? Math.round(n) : n >= 1 ? n.toFixed(1) : n.toFixed(2)}%`;
+const LEVEL_NAME = ['Sin encantar', 'I', 'II', 'III'];
 
 const mainColor = TYPES[p.types[0]]?.[1] ?? '#777';
 const canBreed = !p.egg.includes('undiscovered') && !p.cats.includes('baby');
@@ -89,7 +140,14 @@ const interactions = (interactionData as Interaction[]).filter((i) => i.slug ===
   image={`/img/art/${p.id}.webp`}
   breadcrumbs={[{ name: 'Pokédex', path: '/pokedex/' }, { name: p.es, path: `/pokemon/${p.slug}/` }]}
 >
-  <nav class="crumbs"><a href="/pokedex/"><Icon name="left" /> Pokédex</a></nav>
+  <nav class="crumbs" aria-label="Navegación de la Pokédex">
+    <a href="/pokedex/" class="btn back"><Icon name="left" /> Pokédex</a>
+    <span class="step">
+      {prev ? <a href={`/pokemon/${prev.slug}/`} class="btn icon" rel="prev" aria-label={`Anterior: ${prev.es}`} title={`${num(prev.id)} ${prev.es}`}><Icon name="left" /></a> : <span class="btn icon off" aria-hidden="true"><Icon name="left" /></span>}
+      <b>{num(p.id)}</b>
+      {next ? <a href={`/pokemon/${next.slug}/`} class="btn icon" rel="next" aria-label={`Siguiente: ${next.es}`} title={`${num(next.id)} ${next.es}`}><Icon name="right" /></a> : <span class="btn icon off" aria-hidden="true"><Icon name="right" /></span>}
+    </span>
+  </nav>
 
   <section class="hero" style={`--c: ${mainColor}`}>
     <img src={`/img/art/${p.id}.webp`} alt={`${p.es}, ilustración oficial`} width="320" height="320" data-vt={`mon-${p.id}`} data-vt-hero />
@@ -203,6 +261,80 @@ const interactions = (interactionData as Interaction[]).filter((i) => i.slug ===
               <span class="icon"><Icon name={g.icon} size={20} /></span> {g.name} <span class="count">{g.rows.length}</span>
               <small>{g.help}</small>
             </summary>
+            {g.pos === 'fishing' && (
+              <div class="baits ench">
+                <strong class="baits-title"><Icon name="fish" size={16} /> Encantamientos de la caña</strong>
+                <div class="ench-grid">
+                  <section>
+                    <h4>Atracción</h4>
+                    <p>
+                      Hace que piquen antes y es la que <strong>desbloquea</strong> a algunos Pokémon (cada uno pide un nivel). No
+                      cambia qué tan raro es el pique.
+                    </p>
+                    {lureMatters ? (
+                      <div class="lv">
+                        {lureLevels.map(({ l, buckets }) => (
+                          <div>
+                            <span class="lv-name">{l ? `Atracción ${LEVEL_NAME[l]}` : "Sin Atracción"}</span>
+                            {buckets.length ? buckets.map((b) => <span class="rarity" style={`--r: ${BUCKETS[b][1]}`}>{BUCKETS[b][0]}</span>) : <span class="none">No sale</span>}
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p class="ok">{p.es} sale con cualquier nivel de Atracción, incluso con la caña sin encantar.</p>
+                    )}
+                  </section>
+                  <section>
+                    <h4>Suerte del mar</h4>
+                    <p>
+                      Es la que sube la <strong>rareza</strong> del pique: más nivel, más probabilidad de poco común, raro y muy
+                      raro. Probabilidad de que el pique sea de la rareza de {p.es}:
+                    </p>
+                    <table>
+                      <thead>
+                        <tr>
+                          <th scope="col">Rareza</th>
+                          {LEVEL_NAME.map((n) => <th scope="col">{n}</th>)}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {fishBuckets.map((b) => (
+                          <tr>
+                            <th scope="row"><span class="rarity" style={`--r: ${BUCKETS[b][1]}`}>{BUCKETS[b][0]}</span></th>
+                            {[0, 1, 2, 3].map((t) => <td>{oddsText(rarityOdds(t, b))}</td>)}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </section>
+                </div>
+                <small>
+                  Cada nivel de Suerte del mar suma 1 al nivel de rareza. Como cebo, la manzana dorada, el melón reluciente y la
+                  zanahoria dorada suman +1 (y la manzana dorada encantada +10), pero ocupan el lugar de la baya. Cifras con
+                  las rarezas base del servidor.
+                </small>
+              </div>
+            )}
+            {g.pos === 'fishing' && baits.length > 0 && (
+              <div class="baits">
+                <strong class="baits-title"><Icon name="fish" size={16} /> Cebos que lo atraen más</strong>
+                <p>
+                  Usa una baya como cebo en tu Poké Caña. Sirve <strong>cualquiera</strong> de estas, no solo una:
+                </p>
+                <ul>
+                  {baits.map(([item, b]) => (
+                    <li>
+                      <ItemChip id={item} hint="Úsala como cebo en tu Poké Caña." />
+                      <span class="why">{BAIT_TEXT[b.kind]} {b.why.join(' y ')}{b.kind < 2 ? ' · ×10' : ''}</span>
+                    </li>
+                  ))}
+                </ul>
+                <small>
+                  Por tipo o grupo huevo, el cebo multiplica ×10 las probabilidades de este Pokémon frente a los demás de su
+                  misma rareza. Con una baya de EV solo pican Pokémon que dan ese EV.
+                </small>
+              </div>
+            )}
             <ul class="spawns">
               {g.rows.map(({ s, conds }) => {
                 const [bName, bColor] = s.alpha ? ['Alfa', BUCKETS.boss[1]] : BUCKETS[s.bucket];
@@ -217,7 +349,7 @@ const interactions = (interactionData as Interaction[]).filter((i) => i.slug ===
                       <BiomeList biomes={s.biomes} zones={s.zones} />
                       {s.except && <span class="except">Excepto: {s.except.map((z) => label(ZONES, z)).join(', ')}</span>}
                     </div>
-                    {(conds.length > 0 || s.moon || s.places || s.lure || s.noLure) && (
+                    {(conds.length > 0 || s.moon || s.places || s.lure || s.lureMax !== undefined) && (
                       <ul class="conds">
                         {conds.map((c) => (
                           <li>{c}</li>
@@ -232,17 +364,13 @@ const interactions = (interactionData as Interaction[]).filter((i) => i.slug ===
                             <PlaceChip place={pl} />
                           </li>
                         ))}
-                        {(s.lure || s.noLure) && (
-                          <li>
+                        {(s.lure || s.lureMax !== undefined) && (
+                          <li class="lure">
                             <Tip>
-                              <Icon name="fish" size={15} /> {s.lure ? `Caña con Atracción ${s.lure}+` : 'Caña sin Atracción'}
+                              <Icon name="fish" size={15} /> {lureInfo(s)[0]}
                               <Fragment slot="tip">
                                 <span class="tip-title">Encantamiento Atracción</span>
-                                <span class="tip-line">
-                                  {s.lure
-                                    ? `Tu Poké Caña necesita el encantamiento Atracción de nivel ${s.lure} o más (mesa de encantamientos, o libro encantado + yunque).`
-                                    : 'Solo sale si tu Poké Caña NO tiene el encantamiento Atracción.'}
-                                </span>
+                                <span class="tip-line">{lureInfo(s)[1]}</span>
                               </Fragment>
                             </Tip>
                           </li>
@@ -274,13 +402,31 @@ const interactions = (interactionData as Interaction[]).filter((i) => i.slug ===
           ))
         }
       </ul>
-      <p>Al pescar, los cebos y el encantamiento Atracción de la Poké Caña cambian qué Pokémon pueden salir.</p>
+      <p>Al pescar, el nivel del encantamiento Atracción de la Poké Caña decide qué Pokémon pueden salir (cada uno pide un rango de nivel), y la baya que pongas de cebo hace más probables los de cierto tipo, grupo huevo o EV.</p>
     </details>
   </section>
 
-  <nav class="pager">
-    {prev ? <a href={`/pokemon/${prev.slug}/`}><Icon name="left" /> {num(prev.id)} {prev.es}</a> : <span />}
-    {next && <a href={`/pokemon/${next.slug}/`}>{num(next.id)} {next.es} <Icon name="right" /></a>}
+  <nav class="pager" aria-label="Otros Pokémon">
+    {
+      prev ? (
+        <a href={`/pokemon/${prev.slug}/`} class="pg" rel="prev">
+          <Icon name="left" size={20} />
+          <img src={`/img/thumb/${prev.id}.webp`} alt="" width="56" height="56" loading="lazy" />
+          <span><small>Anterior · {num(prev.id)}</small><b>{prev.es}</b></span>
+        </a>
+      ) : (
+        <span />
+      )
+    }
+    {
+      next && (
+        <a href={`/pokemon/${next.slug}/`} class="pg next" rel="next">
+          <span><small>Siguiente · {num(next.id)}</small><b>{next.es}</b></span>
+          <img src={`/img/thumb/${next.id}.webp`} alt="" width="56" height="56" loading="lazy" />
+          <Icon name="right" size={20} />
+        </a>
+      )
+    }
   </nav>
 </Base>
 
@@ -289,14 +435,51 @@ const interactions = (interactionData as Interaction[]).filter((i) => i.slug ===
     display: grid;
     gap: 12px;
   }
-  .crumbs a,
-  .pager a {
-    color: var(--muted);
-    text-decoration: none;
+  .crumbs {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 14px;
   }
-  .crumbs a:hover,
-  .pager a:hover {
+  .crumbs .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    height: 40px;
+    padding: 0 14px;
+    font-weight: 600;
     color: var(--text);
+    text-decoration: none;
+    background: var(--surface);
+    border-radius: 12px;
+    transition: transform 0.15s, box-shadow 0.15s;
+  }
+  .crumbs a.btn:hover {
+    transform: translateY(-2px);
+  }
+  .crumbs a.btn:active {
+    transform: none;
+  }
+  .crumbs .icon {
+    width: 40px;
+    padding: 0;
+  }
+  .crumbs .off {
+    opacity: 0.35;
+    box-shadow: none;
+  }
+  .step {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .step b {
+    min-width: 3.6em;
+    text-align: center;
+    font: 700 0.95rem var(--font-title);
+    color: var(--muted);
   }
   .hero {
     display: flex;
@@ -465,6 +648,116 @@ const interactions = (interactionData as Interaction[]).filter((i) => i.slug ===
     padding: 0;
     list-style: none;
   }
+  .conds li.lure {
+    border-color: var(--accent);
+  }
+  .baits {
+    margin: 10px 0 4px;
+    padding: 12px 14px;
+    border-radius: 12px;
+    background: color-mix(in srgb, var(--surface-2) 55%, transparent);
+    border: 1px solid var(--border);
+  }
+  .ench {
+    margin-bottom: 10px;
+  }
+  .ench-grid {
+    display: grid;
+    gap: 14px;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr));
+    margin-top: 6px;
+  }
+  .ench h4 {
+    margin: 0 0 2px;
+    font-size: 0.95rem;
+  }
+  .ench p {
+    margin: 0 0 8px;
+  }
+  .ench .ok {
+    color: var(--text);
+  }
+  .lv {
+    display: grid;
+    gap: 6px;
+  }
+  .lv > div {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px 8px;
+    padding: 4px 8px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    font-size: 0.85rem;
+  }
+  .lv-name {
+    min-width: 7.5em;
+    color: var(--muted);
+  }
+  .none {
+    color: var(--muted);
+    font-size: 0.8rem;
+  }
+  .ench table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.85rem;
+  }
+  .ench th,
+  .ench td {
+    padding: 4px 6px;
+    text-align: right;
+    border-bottom: 1px solid var(--border);
+  }
+  .ench th:first-child {
+    text-align: left;
+  }
+  .ench thead th {
+    color: var(--muted);
+    font-weight: 600;
+    font-size: 0.78rem;
+  }
+  .ench td {
+    font-variant-numeric: tabular-nums;
+  }
+  .baits-title {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .baits p {
+    margin: 4px 0 8px;
+    font-size: 0.88rem;
+    color: var(--muted);
+  }
+  .baits ul {
+    list-style: none;
+    margin: 0 0 8px;
+    padding: 0;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 250px), 1fr));
+    gap: 6px;
+  }
+  .baits li {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px 8px;
+    padding: 4px 8px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    font-size: 0.85rem;
+  }
+  .baits .why {
+    color: var(--muted);
+    font-size: 0.8rem;
+  }
+  .baits small {
+    color: var(--muted);
+  }
   .conds li {
     padding: 2px 8px;
     border-radius: 8px;
@@ -506,10 +799,65 @@ const interactions = (interactionData as Interaction[]).filter((i) => i.slug ===
     gap: 6px;
   }
   .pager {
-    display: flex;
-    justify-content: space-between;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 12px;
     margin-top: 32px;
-    font-size: 0.9rem;
+  }
+  .pg {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+    padding: 10px 14px;
+    color: var(--muted);
+    text-decoration: none;
+    background: var(--surface);
+    border-radius: var(--radius);
+    transition: transform 0.15s, box-shadow 0.15s, color 0.15s;
+  }
+  .pg:hover {
+    color: var(--text);
+    transform: translateY(-2px);
+  }
+  .pg:active {
+    transform: none;
+    box-shadow: var(--neu-in);
+  }
+  .pg img {
+    flex: none;
+    width: 56px;
+    height: 56px;
+  }
+  .pg span {
+    display: grid;
+    min-width: 0;
+  }
+  .pg b {
+    overflow: hidden;
+    color: var(--text);
+    font: 700 1.05rem var(--font-title);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .pg small {
+    overflow: hidden;
+    font-size: 0.78rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .pg.next {
+    grid-column: 2;
+    justify-content: flex-end;
+    text-align: right;
+  }
+  @media (max-width: 560px) {
+    .pg img {
+      width: 40px;
+      height: 40px;
+    }
+    .pg > :global(.ico) {
+      display: none;
+    }
   }
 </style>

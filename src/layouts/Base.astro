@@ -209,6 +209,16 @@ const jsonLd = [
     overflow: hidden;
     pointer-events: none;
   }
+  /* Puntos tipo cuadrícula de Pokédex: equivalente en CSS de DotPattern. Quietos, muy tenues y desvanecidos hacia abajo
+     para no competir con el texto ni con los Pokémon de los márgenes. */
+  .backdrop::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background-image: radial-gradient(circle at 1px 1px, rgb(255 255 255 / 0.18) 1px, transparent 1.4px);
+    background-size: 24px 24px;
+    mask-image: radial-gradient(ellipse 80% 65% at 50% 0%, #000, transparent);
+  }
   .backdrop img {
     position: absolute;
     opacity: 0.07;

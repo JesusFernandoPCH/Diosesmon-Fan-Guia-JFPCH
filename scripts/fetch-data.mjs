@@ -197,6 +197,10 @@ async function buildSpawns(biomeIndex) {
       }
 
       const c = s.condition ?? {};
+      // Atracción permitida [lo, hi]: la condición fija un rango y la anticondición lo recorta por arriba o por abajo
+      const lure = { lo: cond.minLureLevel ?? 0, hi: cond.maxLureLevel ?? 3 };
+      if (anti.minLureLevel != null) lure.hi = Math.min(lure.hi, anti.minLureLevel - 1);
+      if (anti.maxLureLevel != null) lure.lo = Math.max(lure.lo, anti.maxLureLevel + 1);
       // la Caña Amor, la Caña Master y el Confite Amor no están disponibles en el servidor
       if (c.rodType || c.bait) continue;
       const base = {
@@ -221,8 +225,8 @@ async function buildSpawns(biomeIndex) {
         ],
         nearby: c.neededNearbyBlocks,
         snack: c.isPokeSnack,
-        lure: c.minLureLevel,
-        noLure: s.anticondition?.minLureLevel ? true : undefined,
+        lure: lure.lo || undefined, // Atracción mínima
+        lureMax: lure.hi < 3 ? lure.hi : undefined, // Atracción máxima (el encantamiento llega a III)
         slime: c.isSlimeChunk,
       };
       // quita claves vacías para que el JSON pese menos
@@ -542,6 +546,10 @@ for (const { data } of speciesFiles)
       if (tag && !evoTags.has(tag)) evoTags.set(tag, await resolveBiomes([tag]));
     }
 
+// EV que da cada especie, con las claves de las carnadas de Cobblemon (hp, atk, def, spa, spd, spe)
+const EV_KEYS = { hp: 'hp', attack: 'atk', defence: 'def', special_attack: 'spa', special_defence: 'spd', speed: 'spe' };
+const evStats = (y = {}) => Object.entries(EV_KEYS).filter(([k]) => y[k] > 0).map(([, v]) => v);
+
 const pokemon = speciesFiles
   .map(({ name, data }) => {
     const slug = name.split('/').pop();
@@ -557,6 +565,7 @@ const pokemon = speciesFiles
       male: data.maleRatio, // -1 = sin género
       cats: data.labels.filter((l) => CATEGORIES.includes(l)),
       catchRate: data.catchRate,
+      ev: (spawns.get(slug) ?? []).some((x) => x.pos === 'fishing') ? evStats(data.evYield) : undefined, // las carnadas de EV solo importan al pescar
       friendship: data.baseFriendship,
       spawns: spawns.get(slug) ?? [],
       evos: buildEvolutions(data, biomeIndex, (tag) => evoTags.get(tag)),
@@ -586,6 +595,14 @@ const itemIds = new Set([
   // crianza: objetos Recios (cada uno asegura un IV) y Lazo Destino
   'cobblemon:power_weight', 'cobblemon:power_bracer', 'cobblemon:power_belt', 'cobblemon:power_lens', 'cobblemon:power_band', 'cobblemon:power_anklet', 'cobblemon:destiny_knot',
 ]);
+// Carnadas (bayas) de la Poké Caña que cambian qué Pokémon pican: tipo y grupo huevo multiplican su peso, EV lo filtra
+const BAIT_EFFECTS = { 'cobblemon:typing': 'type', 'cobblemon:egg_group': 'egg', 'cobblemon:ev': 'ev' };
+const baits = {};
+for (const { data } of jsonFiles(join(DATA, 'spawn_bait_effects'))) {
+  const effects = (data.effects ?? []).filter((e) => BAIT_EFFECTS[e.type]).map((e) => ({ t: BAIT_EFFECTS[e.type], k: e.subcategory.split(':').pop(), v: e.value }));
+  if (effects.length) baits[data.item] = effects;
+}
+Object.keys(baits).forEach((i) => itemIds.add(i));
 const moveIds = new Set();
 for (const p of pokemon) {
   for (const s of p.spawns) [s.rod, s.bait].filter(Boolean).forEach((i) => itemIds.add(i));
@@ -717,6 +734,7 @@ writeFileSync(join(OUT, 'biomes.json'), JSON.stringify(biomes));
 writeFileSync(join(OUT, 'blocks.json'), JSON.stringify(blockNames));
 writeFileSync(join(OUT, 'items.json'), JSON.stringify(items));
 writeFileSync(join(OUT, 'moves.json'), JSON.stringify(moves));
+writeFileSync(join(OUT, 'baits.json'), JSON.stringify(baits));
 writeFileSync(join(OUT, 'megas.json'), JSON.stringify(megas));
 writeFileSync(join(OUT, 'abilities.json'), JSON.stringify(abilities));
 writeFileSync(join(OUT, 'interactions.json'), JSON.stringify(interactions));
@@ -730,7 +748,10 @@ writeFileSync(
 );
 
 // Imágenes
-await downloadImages(pokemon.map((p) => p.id));
+// Solo las generaciones habilitadas en el servidor (src/data/config.ts) y los Pokémon de las tarjetas de sección (src/data/sections.ts)
+const enabled = JSON.parse(readFileSync('src/data/config.ts', 'utf8').match(/ENABLED_GENS\s*=\s*(\[[^\]]*\])/)[1]);
+const sectionArt = [...readFileSync('src/data/sections.ts', 'utf8').matchAll(/art:\s*(\d+)/g)].map((m) => +m[1]);
+await downloadImages(pokemon.filter((p) => enabled.includes(p.gen) || sectionArt.includes(p.id)).map((p) => p.id));
 const titleCase = (id) => id.split('_').map((w) => w[0].toUpperCase() + w.slice(1)).join(' ');
 await wikiImages(Object.fromEntries(biomes.map((b) => [b.id, titleCase(b.id)])), 'biome', 320, 180);
 await wikiImages(
