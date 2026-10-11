@@ -5,6 +5,7 @@ import Icon from '../components/Icon.astro';
 import itemData from '../data/items.json';
 import { BUCKETS, EGG } from '../data/labels';
 import { all, rootOf } from '../lib/evo';
+import { rarityOf } from '../lib/rarity';
 import { GENDER_PRICE, ITEM_PRICE } from '../lib/breeding';
 import { HARD_TO_FIND, RECOMMENDED } from '../data/crianza';
 import { icon } from '../lib/icons';
@@ -22,13 +23,12 @@ const bucketRank = ['common', 'uncommon', 'rare', 'ultra-rare'];
 // Qué tan fácil es conseguirlo, en este orden: rareza (Común > Poco común…), ratio de captura (el más alto primero)
 // y, solo para desempatar, cuánto aparece (peso de sus spawns de esa rareza × biomas donde sale).
 const easy = (p: (typeof all)[number]) => {
-  const tier = Math.min(...p.spawns.map((s) => bucketRank.indexOf(s.bucket)).filter((i) => i >= 0));
-  if (!Number.isFinite(tier)) return 0;
+  const tier = bucketRank.indexOf(rarityOf(p) ?? '');
+  if (tier < 0) return 0;
   const reach = p.spawns.filter((s) => s.bucket === bucketRank[tier]).reduce((t, s) => t + s.w * s.biomes.length, 0);
   return (bucketRank.length - tier) * 1e6 + p.catchRate * 1e3 + Math.min(999, Math.log1p(reach) * 100);
 };
 const species = all.map((p) => {
-  const buckets = p.spawns.map((s) => s.bucket).filter((b) => bucketRank.includes(b));
   return {
     slug: p.slug,
     id: p.id,
@@ -38,7 +38,7 @@ const species = all.map((p) => {
     egg: familyEgg.get(rootOf(p.slug)) ?? p.egg,
     male: p.male,
     catchRate: p.catchRate,
-    bucket: buckets.sort((a, b) => bucketRank.indexOf(a) - bucketRank.indexOf(b))[0] ?? '',
+    bucket: bucketRank.includes(rarityOf(p) ?? '') ? rarityOf(p)! : '',
     score: easy(p),
     hard: HARD_TO_FIND.includes(p.slug),
   };

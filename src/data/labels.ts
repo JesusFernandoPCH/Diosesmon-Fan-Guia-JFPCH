@@ -49,10 +49,10 @@ export const EGG: Record<string, string> = {
 };
 
 export const BUCKETS: Record<string, [string, string]> = {
-  common: ['Común', '#8bc34a'],
-  uncommon: ['Poco común', '#29b6f6'],
-  rare: ['Raro', '#ab47bc'],
-  'ultra-rare': ['Muy raro', '#ffb300'],
+  common: ['Común', '#9aa3ad'],
+  uncommon: ['Poco común', '#4cc46b'],
+  rare: ['Rara', '#42a5f5'],
+  'ultra-rare': ['Ultra rara', '#ffc928'],
   boss: ['Alfa', '#ef5350'],
 };
 

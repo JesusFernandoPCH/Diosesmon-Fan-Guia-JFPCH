@@ -4,13 +4,13 @@ import TypeChip from '../components/TypeChip.astro';
 import Icon from '../components/Icon.astro';
 import biomeData from '../data/biomes.json';
 import meta from '../data/meta.json';
-import type { Biome, Pokemon } from '../data/types';
+import type { Biome } from '../data/types';
 import { all } from '../lib/evo';
+import { rarityOf } from '../lib/rarity';
 import { BUCKETS, CATEGORIES, EGG, PLACES, POSITIONS, TIMES, TYPES, label } from '../data/labels';
 
 const pokemon = all;
 const biomes = biomeData as Biome[];
-const BUCKET_ORDER = Object.keys(BUCKETS);
 const fold = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
 
 // Índice compacto para filtrar en el navegador.
@@ -42,8 +42,6 @@ const index = pokemon.map((p) => {
   };
 });
 
-const bestBucket = (p: Pokemon) =>
-  p.spawns.map((s) => (s.alpha ? 'boss' : s.bucket)).sort((a, b) => BUCKET_ORDER.indexOf(a) - BUCKET_ORDER.indexOf(b))[0];
 const usedPlaces = [...new Set(pokemon.flatMap((p) => p.spawns.flatMap((s) => s.places ?? [])))].sort((a, b) =>
   label(PLACES, a).localeCompare(label(PLACES, b), 'es'),
 );
@@ -231,7 +229,7 @@ const num = (id: number) => `#${String(id).padStart(4, '0')}`;
       <ul class="grid" id="list">
         {
           pokemon.map((p, i) => {
-            const best = bestBucket(p);
+            const best = rarityOf(p);
             const methods = [...new Set(p.spawns.map((s) => s.pos))];
             return (
               <li data-i={i}>
